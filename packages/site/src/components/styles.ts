@@ -22,12 +22,8 @@ export const ContentContainer = styled.div`
   width: auto;
   color: #131313 !important;
 
-  *, p, h1, h2, h3, h4, h5, h6, span, div, a, label {
+  p, h1, h2, h3, h4, h5, h6, span, div, a, label {
     color: #131313 !important;
-  }
-
-  button, button * {
-    color: #FFFFFF !important;
   }
 
 

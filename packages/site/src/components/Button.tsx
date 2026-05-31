@@ -129,7 +129,7 @@ const StyledButton = styled.button<StyledButtonProps>`
   font-size: ${(props) => props.theme.fontSizes.small};
   font-weight: 500;
   line-height: 1.2;
-  color: ${COLORS.white};
+  color: ${COLORS.white} !important;
   min-height: 4.2rem;
   height: 4.2rem; /* Fixed height to prevent layout shift */
   flex: ${(props) => (props.$fullWidth ? '1' : 'none')};

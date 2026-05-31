@@ -176,7 +176,7 @@ export const QuickAccessButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #FFFFFF;
+  color: #FFFFFF !important;
   font-weight: ${typography.weights.semibold};
   font-size: ${typography.sizes.xs};
   outline: none;
@@ -1087,7 +1087,7 @@ export const TabButton = styled.button.withConfig({
   width: 100%;
   background: none;
   border: 2px solid ${colors.primary};
-  color: ${({ active }) => (active ? colors.text.primary : colors.text.muted)};
+  color: ${({ active }) => (active ? colors.text.primary : colors.text.muted)} !important;
   font-size: ${typography.sizes.xl};
   font-weight: ${typography.weights.semibold};
   border-radius: ${borderRadius.sm};
