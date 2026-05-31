@@ -180,6 +180,15 @@ export const MobileMenuDropdown = styled.div<{ $isVisible: boolean }>`
   min-width: 280px;
   max-width: calc(100vw - 32px);
 
+  /* Force RainbowKit buttons to have dark background with white text */
+  [data-rk] button {
+    background-color: #1a1b23 !important;
+    color: #ffffff !important;
+  }
+  [data-rk] button * {
+    color: #ffffff !important;
+  }
+
   opacity: ${(props) => (props.$isVisible ? '1' : '0')};
   visibility: ${(props) => (props.$isVisible ? 'visible' : 'hidden')};
   transform: ${(props) =>

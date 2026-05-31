@@ -170,25 +170,37 @@ export const QuickAccessItem = styled.section`
 export const QuickAccessButton = styled.button`
   width: 48px;
   height: 48px;
-  border-radius: ${borderRadius.full};
   background: ${colors.primary};
+  border: none;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${colors.background.primary};
+  color: #FFFFFF;
   font-weight: ${typography.weights.semibold};
   font-size: ${typography.sizes.xs};
-  ${buttonBase}
+  outline: none;
+  cursor: pointer;
+  transition: all ${transitions.normal};
+
+  &:focus {
+    outline: 2px solid ${colors.primary};
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 
   &:hover:not(:disabled) {
-    background: ${colors.primaryHover};
+    opacity: 0.7;
   }
 
   svg {
     width: ${spacing.xl};
     height: ${spacing.xl};
-    color: ${colors.background.primary};
-    stroke: ${colors.background.primary};
+    stroke: #FFFFFF;
     fill: none;
     stroke-width: 2.2;
   }
@@ -282,7 +294,7 @@ export const Tab = styled.button.withConfig({
   font-size: ${typography.sizes.xl};
   font-weight: ${({ active }) =>
     active ? typography.weights.normal : typography.weights.normal};
-  color: ${({ active }) => (active ? colors.text.primary : '#071550')};
+  color: ${({ active }) => (active ? colors.text.primary : '#071550')} !important;
   border-bottom: 2px solid
     ${({ active }) => (active ? '#1E29F6' : colors.border.primary)};
   padding: 0 ${spacing.xl} ${spacing.lg} ${spacing.xl};
@@ -498,6 +510,9 @@ export const TokenInfo = styled.div`
   display: flex;
   align-items: center;
   gap: ${spacing.xs};
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 
   &:hover {
     cursor: pointer;
@@ -508,6 +523,7 @@ export const TokenLogos = styled.div`
   position: relative;
   width: 40px;
   height: 40px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
 
@@ -563,6 +579,9 @@ export const TokenName = styled.span`
   font-size: ${typography.sizes.lg};
   font-weight: ${typography.weights.bold};
   color: #000000 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
   @media (max-width: 600px) {
     font-size: 14px;

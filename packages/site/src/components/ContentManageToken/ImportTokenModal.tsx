@@ -22,7 +22,7 @@ import {
 } from './styles';
 import SpinnerIcon from '../../assets/spinner.png';
 import { ERROR_MESSAGES } from '../../constants/token';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import { useImportedTokens } from '../../hooks/useImportedTokens';
 import { useModal } from '../../hooks/useModal';
 import { useTokenOperations } from '../../hooks/useTokenOperations';
@@ -142,7 +142,8 @@ export const ImportTokenModal: React.FC<ImportTokenModalProps> = React.memo(
       addTokenToMetaMask,
       setAccountEncryptionAddress,
     } = useTokenOperations(provider);
-    const { userAESKey, userHasAESKey } = useSnap();
+    const { aesKey: userAESKey } = useAesKey();
+    const userHasAESKey = userAESKey !== null;
     const { addToken, hasToken } = useImportedTokens();
     const { state, updateState, resetState } = useImportTokenModal();
     const [syncingEncryptionAddress, setSyncingEncryptionAddress] =

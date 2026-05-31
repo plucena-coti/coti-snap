@@ -57,8 +57,8 @@ export const MetaMaskProvider = ({ children }: { children: ReactNode }) => {
         if (isMounted) {
           setProvider(snapsProvider);
         }
-      } catch (error) {
-        void error;
+      } catch (providerError) {
+        void providerError;
       } finally {
         if (isMounted) {
           setHasCheckedForProvider(true);
@@ -79,9 +79,7 @@ export const MetaMaskProvider = ({ children }: { children: ReactNode }) => {
         setError(null);
       }, 10000);
 
-      return () => {
-        clearTimeout(timeout);
-      };
+      return () => clearTimeout(timeout);
     }
 
     return undefined;

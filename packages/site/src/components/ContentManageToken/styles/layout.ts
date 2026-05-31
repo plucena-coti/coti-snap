@@ -32,25 +32,24 @@ export const QuickAccessItem = styled.section`
 export const QuickAccessButton = styled.button`
   width: 44px;
   height: 44px;
-  border-radius: ${borderRadius.full};
-  background: ${colors.primary};
+  background: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${colors.background.primary};
+  color: ${colors.primary};
   font-weight: ${typography.weights.semibold};
   font-size: ${typography.sizes.xs};
   ${buttonBase}
 
   &:hover:not(:disabled) {
-    background: ${colors.primaryHover};
+    opacity: 0.7;
   }
 
   svg {
     width: ${spacing.xl};
     height: ${spacing.xl};
-    color: ${colors.background.primary};
-    stroke: ${colors.background.primary};
+    color: ${colors.primary};
+    stroke: ${colors.primary};
     fill: none;
     stroke-width: 2.2;
   }

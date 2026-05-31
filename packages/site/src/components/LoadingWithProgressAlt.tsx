@@ -2,7 +2,6 @@ import React from 'react';
 import styled, { keyframes } from 'styled-components';
 
 import LoaderIcon from '../assets/icons/loader.png';
-import { useSnap } from '../hooks/SnapContext';
 
 const spin = keyframes`
   from {

@@ -16,7 +16,7 @@ import {
   ContentContainer,
 } from './styles';
 import { useMetaMask } from '../hooks';
-import { useSnap } from '../hooks/SnapContext';
+import { useAesKey } from '../hooks/AesKeyContext';
 import { useInvokeSnap } from '../hooks/useInvokeSnap';
 
 type PermissionCheckResult = {
@@ -50,7 +50,7 @@ const isPermissionDenied = (
 export const PermissionGuard: React.FC<PermissionGuardProps> = ({
   children,
 }) => {
-  const { settingAESKeyError } = useSnap();
+  const { onboardingError: settingAESKeyError } = useAesKey();
   const { address, isConnected } = useAccount();
   const { installedSnap } = useMetaMask();
   const invokeSnap = useInvokeSnap();

@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi';
 
 import { DeleteAESKey } from './DeleteAESKey';
 import { OnboardAccount } from './OnboardAccount';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import { ContentManageToken } from '../ContentManageToken';
 import { DisplayAESKey } from '../ContentManageToken/DisplayAESKey';
 import { ContentBorderWrapper, ContentContainer } from '../styles';
@@ -22,7 +22,7 @@ export const ContentManageAESKey: React.FC<ContentManageAESKeyProps> = ({
   userAESKey,
 }) => {
   const { address } = useAccount();
-  const { onboardingStep } = useSnap();
+  const { isOnboarding } = useAesKey();
   const [aesKeyState, setAesKeyState] = useState<AESKeyState>({
     showManage: false,
   });
@@ -36,8 +36,8 @@ export const ContentManageAESKey: React.FC<ContentManageAESKeyProps> = ({
   }, [address]);
 
   const shouldShowOnboarding = useMemo(() => {
-    return !userHasAESKey || onboardingStep !== null;
-  }, [userHasAESKey, onboardingStep]);
+    return !userHasAESKey || isOnboarding;
+  }, [userHasAESKey, isOnboarding]);
 
   const shouldShowTokenManagement = useMemo(
     () => userHasAESKey && !aesKeyState.showManage && !showDeleteConfirmation,

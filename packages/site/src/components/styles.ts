@@ -20,6 +20,17 @@ export const ContentContainer = styled.div`
   background-color: ${(props) => props.theme.colors.background?.content};
   border-radius: 24px;
   width: auto;
+  color: #131313 !important;
+
+  *, p, h1, h2, h3, h4, h5, h6, span, div, a, label {
+    color: #131313 !important;
+  }
+
+  button, button * {
+    color: #FFFFFF !important;
+  }
+
+
   ${({ theme }) => theme.mediaQueries.small} {
     flex-direction: column;
     gap: 16px;

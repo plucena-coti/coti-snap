@@ -38,7 +38,7 @@ import VerticalMenuIcon from '../../assets/icons/vertical-menu.svg';
 import { CotiLogo } from '../../assets/icons';
 import TrashIcon from '../../assets/icons/trash.svg';
 import { useChainId } from 'wagmi';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import { getNetworkConfig } from '../../config/networks';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useDropdown } from '../../hooks/useDropdown';
@@ -77,7 +77,7 @@ const TokenDetails: React.FC<TokenDetailModalProps> = ({
   const chainId = useChainId();
   const networkConfig = getNetworkConfig(chainId);
   const networkName = networkConfig.name;
-  const { userAESKey } = useSnap();
+  const { aesKey: userAESKey } = useAesKey();
   const { decryptERC20Balance } = useTokenOperations(provider);
   const { importedTokens } = useImportedTokens();
   const [decryptedBalance, setDecryptedBalance] = useState<string>('');

@@ -1,18 +1,33 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import '@rainbow-me/rainbowkit/styles.css';
+
 import type { FunctionComponent, ReactNode } from 'react';
 import { StrictMode, createContext, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import styled, { ThemeProvider } from 'styled-components';
-import { WagmiProvider } from 'wagmi';
+import {
+  configureCotiPlugin,
+  WagmiRainbowKitProvider,
+} from '@coti-io/coti-wallet-plugin';
 
 import './components/ContentManageToken/transitions.css';
 import App from './App.js';
 import { GlobalBackground } from './components/GlobalBackground';
 import { dark, GlobalStyle, light } from './config/theme.js';
-import { config } from './config/wagmi.js';
-import { MetaMaskProvider } from './hooks/MetamaskContext.js';
-import { SnapProvider } from './hooks/SnapContext.js';
+import { AesKeyProvider } from './hooks/AesKeyContext';
+import { MetaMaskProvider } from './hooks/MetamaskContext';
 import { getThemePreference } from './utils';
+
+// Resolve snap ID from environment (mirrors logic from config/snap.ts)
+const isSnapLocal = import.meta.env.VITE_SNAP_ENV === 'local';
+const snapId = isSnapLocal
+  ? `local:${import.meta.env.VITE_SNAP_LOCAL_URL ?? 'http://localhost:8080'}`
+  : (import.meta.env.VITE_SNAP_ORIGIN ?? 'npm:@coti-io/coti-snap');
+
+// Configure the COTI plugin before React renders
+configureCotiPlugin({
+  snapId,
+  defaultNetworkId: 2632500, // COTI Mainnet
+});
 
 const Wrapper = styled.div`
   display: flex;
@@ -39,22 +54,18 @@ export const Root: FunctionComponent<RootProps> = ({ children }) => {
 
   return (
     <ThemeProvider theme={darkTheme ? dark : light}>
-      <WagmiProvider config={config}>
-        <QueryClientProvider client={queryClient}>
-          <MetaMaskProvider>
-            <SnapProvider>
-              <GlobalBackground>
-                <Wrapper>{children}</Wrapper>
-              </GlobalBackground>
-            </SnapProvider>
-          </MetaMaskProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
+      <WagmiRainbowKitProvider>
+        <MetaMaskProvider>
+          <AesKeyProvider>
+            <GlobalBackground>
+              <Wrapper>{children}</Wrapper>
+            </GlobalBackground>
+          </AesKeyProvider>
+        </MetaMaskProvider>
+      </WagmiRainbowKitProvider>
     </ThemeProvider>
   );
 };
-
-const queryClient = new QueryClient();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

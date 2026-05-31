@@ -3,7 +3,7 @@ import {
   COTI_MAINNET_CHAIN_ID,
   DEFAULT_CHAIN_ID,
   SUPPORTED_CHAIN_IDS,
-} from './wagmi';
+} from './chains';
 
 export type NetworkConfig = {
   id: number;

@@ -12,7 +12,7 @@ export type BalanceProps = {
 } & BaseBalanceProps;
 
 export type BalanceDisplayProps = {
-  balance: string;
+  balance: string | undefined;
   currency?: string | undefined;
   className?: string | undefined;
   showCurrency?: boolean;

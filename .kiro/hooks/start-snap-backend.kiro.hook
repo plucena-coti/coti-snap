@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Start Snap Backend",
+  "description": "Starts the MetaMask Snap backend in watch/development mode (mm-snap watch)",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "yarn workspace @coti-io/coti-snap start"
+  }
+}

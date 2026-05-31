@@ -36,7 +36,7 @@ import SendIcon from '../../assets/send.svg';
 import { getNetworkConfig } from '../../config/networks';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useMetaMaskContext } from '../../hooks/MetamaskContext';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import type { ImportedToken } from '../../types/token';
 import { formatAddressForDisplay } from '../../utils/tokenValidation';
 import { ButtonAction } from '../Button';
@@ -190,9 +190,10 @@ type ContentManageTokenProps = {
 export const ContentManageToken: React.FC<ContentManageTokenProps> = memo(
   ({ aesKey }) => {
     const { address, chain } = useAccount();
-    const { data: balance, refetch: refetchBalance } = useBalance({ address });
+    const { data: balance, isLoading: isBalanceLoading, refetch: refetchBalance } = useBalance({ address });
     const { provider } = useMetaMaskContext();
-    const { getAESKey, userAESKey, userHasAESKey } = useSnap();
+    const { getAesKey: getAESKey, aesKey: userAESKey } = useAesKey();
+    const userHasAESKey = userAESKey !== null;
     const { copied, copyToClipboard } = useCopyToClipboard();
 
     const currentAESKey = userAESKey || aesKey;
@@ -524,7 +525,7 @@ export const ContentManageToken: React.FC<ContentManageTokenProps> = memo(
     return (
       <ContentWrapper>
         <MainStack>
-          <BalanceDisplay balance={formattedBalance} />
+          <BalanceDisplay balance={isBalanceLoading ? undefined : formattedBalance} />
 
           <QuickAccessActions
             onSendClick={handleSendClick}

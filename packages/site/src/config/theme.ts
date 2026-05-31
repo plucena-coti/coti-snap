@@ -178,11 +178,15 @@ export const GlobalStyle = createGlobalStyle`
     font-family: ${(props) => props.theme.fonts.default};
   }
 
-  * {
-    color: #FFFFFF;
-  }
-
-  p, h1, h2, h3, h4, h5, h6, span, div, a {
-    color: #FFFFFF !important;
+  /* Allow RainbowKit modal to control its own text colors */
+  [aria-labelledby="rk_connect_title"] *,
+  [aria-labelledby="rk_connect_title"] button,
+  [aria-labelledby="rk_account_modal_title"] *,
+  [aria-labelledby="rk_account_modal_title"] button,
+  [aria-labelledby="rk_chain_modal_title"] *,
+  [aria-labelledby="rk_chain_modal_title"] button,
+  [role="dialog"][aria-modal="true"] *,
+  [role="dialog"][aria-modal="true"] button {
+    color: initial !important;
   }
 `;

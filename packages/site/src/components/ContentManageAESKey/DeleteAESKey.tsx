@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { ContentBoldText, ContentButtons } from './styles';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import { ButtonCancelWhite, ButtonDeleteRed } from '../Button';
 import { Loading } from '../Loading';
 import { ContentText, ContentTitle } from '../styles';
@@ -13,11 +13,11 @@ type DeleteAESKeyProps = {
 export const DeleteAESKey: React.FC<DeleteAESKeyProps> = ({
   handleShowDelete,
 }) => {
-  const { deleteAESKey, loading } = useSnap();
+  const { clearAesKey: deleteAESKey, isOnboarding: loading } = useAesKey();
 
   const handleDeleteClick = async (): Promise<void> => {
     try {
-      await deleteAESKey();
+      deleteAESKey();
       handleShowDelete();
     } catch (error) {
       void error;

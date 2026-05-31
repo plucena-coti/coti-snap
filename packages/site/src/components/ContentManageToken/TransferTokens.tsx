@@ -12,7 +12,7 @@ import React, {
 
 import { Alert, type AlertType } from './Alert';
 import { useImportedTokens } from '../../hooks/useImportedTokens';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import { JazziconComponent } from '../common';
 import { TokenId } from './components/TokenId';
 import { ErrorText } from './components/ErrorText';
@@ -799,7 +799,8 @@ export const TransferTokens: React.FC<TransferTokensProps> = React.memo(
     const [showEthSignModal, setShowEthSignModal] = useState(false);
     const { getERC20TokensList, importedTokens, removeToken } =
       useImportedTokens();
-    const { getAESKey, userHasAESKey } = useSnap();
+    const { getAesKey: getAESKey, aesKey: contextAesKey } = useAesKey();
+    const userHasAESKey = contextAesKey !== null;
 
     const accountBoxRef = useRef<HTMLDivElement>(null);
     const amountInputRef = useRef<HTMLInputElement>(null);

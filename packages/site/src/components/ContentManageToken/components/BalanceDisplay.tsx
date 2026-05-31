@@ -15,6 +15,10 @@ export const BalanceDisplay: React.FC<BalanceDisplayProps> = ({
   isDecrypted = true,
 }) => {
   const formattedBalance = React.useMemo(() => {
+    if (balance === undefined) {
+      return '...';
+    }
+
     if (!balance || balance === '0' || typeof balance !== 'string') {
       return '0';
     }

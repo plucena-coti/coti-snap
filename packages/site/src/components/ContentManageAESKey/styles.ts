@@ -1,5 +1,10 @@
-import type { SetAESKeyError } from 'src/hooks/SnapContext';
 import styled, { css } from 'styled-components';
+
+/**
+ * Error type for AES key operations.
+ * Previously imported from SnapContext as SetAESKeyError.
+ */
+type SetAESKeyError = string | null;
 
 type EditableInputContainerProps = {
   $isEditable: boolean;

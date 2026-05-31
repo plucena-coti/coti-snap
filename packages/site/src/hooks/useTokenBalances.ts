@@ -18,7 +18,7 @@ export const useTokenBalances = ({
   cotiBalance,
 }: UseTokenBalancesProps) => {
   const [balances, setBalances] = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { decryptERC20Balance } = useTokenOperations(provider);
   const abortControllerRef = useRef<AbortController | null>(null);
 

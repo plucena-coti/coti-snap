@@ -3,8 +3,18 @@ import styled, { keyframes } from 'styled-components';
 
 import { StepProgressBar } from './StepProgressBar';
 import LoaderIcon from '../assets/icons/loader.png';
-import { useSnap } from '../hooks/SnapContext';
-import type { OnboardingStep } from '../hooks/SnapContext';
+import { useAesKey } from '../hooks/AesKeyContext';
+
+/**
+ * Onboarding step type - previously from SnapContext.
+ * Now defined locally since AesKeyContext uses isOnboarding boolean instead.
+ */
+type OnboardingStep =
+  | 'signature-prompt'
+  | 'signature-request'
+  | 'send-tx'
+  | 'done'
+  | null;
 
 const spin = keyframes`
   from {
@@ -63,7 +73,9 @@ export const LoadingWithProgress: React.FC<LoadingWithProgressProps> = ({
   title,
   actionText,
 }) => {
-  const { onboardingStep } = useSnap();
+  const { isOnboarding } = useAesKey();
+  // When isOnboarding is true, show step 2 (in-progress); otherwise step 1 (idle)
+  const onboardingStep: OnboardingStep = isOnboarding ? 'signature-request' : 'signature-prompt';
   const currentStep = getStepNumber(onboardingStep);
 
   return (

@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Start Website Dev Server",
+  "description": "Starts the Vite development server for the site package",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "yarn workspace site start"
+  }
+}

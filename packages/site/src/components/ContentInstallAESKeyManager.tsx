@@ -1,5 +1,7 @@
-import { useCallback, useTransition } from 'react';
+import { useCallback, useState, useTransition } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
+import { useSnap } from '@coti-io/coti-wallet-plugin';
 
 import { ButtonAction } from './Button';
 import {
@@ -10,7 +12,7 @@ import {
 } from './styles';
 import Metamask from '../assets/metamask_fox.svg';
 import SpinnerIcon from '../assets/spinner.png';
-import { useRequestSnap, useMetaMask } from '../hooks';
+import { useAesKey } from '../hooks/AesKeyContext';
 
 const spin = keyframes`
   from {
@@ -60,27 +62,78 @@ const InfoText = styled.span`
   color: rgba(255, 255, 255, 0.9);
 `;
 
+const ErrorBox = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+`;
+
+const ErrorIcon = styled.span`
+  font-size: 16px;
+  line-height: 1.4;
+  flex-shrink: 0;
+`;
+
+const ErrorContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const ErrorTitle = styled.span`
+  font-size: 14px;
+  font-weight: 600;
+  color: #dc2626;
+`;
+
+const ErrorText = styled.span`
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(220, 38, 38, 0.9);
+`;
+
 export const ContentInstallAESKeyManager = () => {
-  const snapVersion = process.env.VITE_SNAP_VERSION;
-  const requestSnap = useRequestSnap(undefined, snapVersion);
-  const { getSnap, isInstallingSnap } = useMetaMask();
+  const navigate = useNavigate();
+  const { getAesKey } = useAesKey();
+  const { requestSnap } = useSnap();
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [snapError, setSnapError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleInstallSnap = useCallback(async () => {
     try {
+      setIsInstalling(true);
+      setSnapError(null);
+
       startTransition(() => {
-        // This will make the navigation and subsequent re-renders non-blocking
+        // Makes navigation and subsequent re-renders non-blocking
       });
 
+      // Install the Snap via the plugin's useSnap hook
       await requestSnap();
 
+      // Brief delay to allow Snap state to settle
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      await getSnap();
-    } catch (error) {
-      void error;
+      // Retrieve the AES key via the context (delegates to plugin)
+      await getAesKey();
+
+      // Navigate to wallet after successful installation and key retrieval
+      navigate('/wallet', { replace: true });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Snap installation failed. Please try again.';
+      setSnapError(message);
+    } finally {
+      setIsInstalling(false);
     }
-  }, [requestSnap, getSnap]);
+  }, [requestSnap, getAesKey, navigate]);
 
   return (
     <ContentBorderWrapper>
@@ -104,17 +157,29 @@ export const ContentInstallAESKeyManager = () => {
           </InfoContent>
         </InfoBox>
 
+        {snapError && (
+          <ErrorBox>
+            <ErrorIcon>⚠️</ErrorIcon>
+            <ErrorContent>
+              <ErrorTitle>Installation Error</ErrorTitle>
+              <ErrorText>{snapError}</ErrorText>
+            </ErrorContent>
+          </ErrorBox>
+        )}
+
         <ButtonAction
           text={
-            isInstallingSnap || isPending
+            isInstalling || isPending
               ? 'Installing'
-              : 'Install with MetaMask'
+              : snapError
+                ? 'Retry Installation'
+                : 'Install with MetaMask'
           }
           primary
           onClick={handleInstallSnap}
-          disabled={isInstallingSnap || isPending}
+          disabled={isInstalling || isPending}
           iconLeft={
-            isInstallingSnap || isPending ? (
+            isInstalling || isPending ? (
               <SpinnerImage src={SpinnerIcon} alt="Loading" />
             ) : undefined
           }

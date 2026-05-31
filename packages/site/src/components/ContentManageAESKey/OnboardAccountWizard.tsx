@@ -15,9 +15,9 @@ import {
   getOnboardContractLink,
 } from '../../config/onboard';
 import { useWrongChain } from '../../hooks';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import { ButtonAction, ButtonCancel } from '../Button';
-import { ContentConnectYourWallet } from '../ContentConnectYourWallet';
+import { ConnectPage } from '../ConnectPage';
 import { Alert } from '../ContentManageToken/Alert';
 import { ContentSwitchNetwork } from '../ContentSwitchNetwork';
 import { LoadingWithProgress } from '../LoadingWithProgress';
@@ -36,13 +36,23 @@ export const OnboardAccountWizard: React.FC<OnboardAccountWizardProps> = ({
   handleCancelOnboard,
 }) => {
   const {
-    setAESKey,
-    loading,
-    settingAESKeyError,
-    onboardContractAddress,
-    handleOnChangeContactAddress,
-    handleCancelOnboard: snapCancelOnboard,
-  } = useSnap();
+    getAesKey: setAESKey,
+    isOnboarding: loading,
+    onboardingError: settingAESKeyError,
+  } = useAesKey();
+
+  // Onboard contract address - use default from config
+  const [onboardContractAddress, setOnboardContractAddress] = useState(
+    getOnboardContractLink(undefined) || '',
+  );
+
+  const handleOnChangeContactAddress = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setOnboardContractAddress(e.target.value);
+  };
+
+  const snapCancelOnboard = () => {
+    // No-op: cancellation handled by closing the wizard
+  };
 
   const { address, chain } = useAccount();
   const [isEditable, setIsEditable] = useState(false);
@@ -171,6 +181,6 @@ export const OnboardAccountWizard: React.FC<OnboardAccountWizardProps> = ({
       </>
     )
   ) : (
-    <ContentConnectYourWallet />
+    <ConnectPage />
   );
 };

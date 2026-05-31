@@ -50,6 +50,7 @@ const getVariantStyles = (variant: ButtonVariant) => {
         border: none;
         border-radius: ${(props) => props.theme.radii.small};
         padding: 15px 40px;
+        color: ${COLORS.white} !important;
 
         &:hover:not(:disabled) {
           background-color: ${COLORS.actionHover};
@@ -57,7 +58,7 @@ const getVariantStyles = (variant: ButtonVariant) => {
 
         &:disabled {
           background-color: ${COLORS.actionHover};
-          color: ${COLORS.white};
+          color: ${COLORS.white} !important;
         }
       `;
 

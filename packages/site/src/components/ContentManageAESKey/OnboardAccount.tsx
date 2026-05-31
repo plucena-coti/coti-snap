@@ -8,9 +8,9 @@ import {
   ONBOARD_CONTRACT_GITHUB_LINK,
 } from '../../config/onboard';
 import { useWrongChain, useMetaMask } from '../../hooks';
-import { useSnap } from '../../hooks/SnapContext';
+import { useAesKey } from '../../hooks/AesKeyContext';
 import { ButtonAction } from '../Button';
-import { ContentConnectYourWallet } from '../ContentConnectYourWallet';
+import { ConnectPage } from '../ConnectPage';
 import { Alert } from '../ContentManageToken/Alert';
 import { ContentSwitchNetwork } from '../ContentSwitchNetwork';
 import { LoadingWithProgress } from '../LoadingWithProgress';
@@ -109,11 +109,14 @@ const ArrowIcon = styled.span`
 `;
 
 export const OnboardAccount: React.FC<OnboardAccountProps> = memo(() => {
-  const { setAESKey, loading, settingAESKeyError, onboardContractAddress } =
-    useSnap();
+  const { getAesKey: setAESKey, isOnboarding: loading, onboardingError: settingAESKeyError } =
+    useAesKey();
   const { isConnected, chain } = useAccount();
   const { wrongChain } = useWrongChain();
   const { isInstallingSnap } = useMetaMask();
+
+  // Default onboard contract address from config
+  const onboardContractAddress = getOnboardContractLink(chain?.id) || '';
 
   const contractExplorerLink = useMemo(
     () => getOnboardContractLink(chain?.id),
@@ -188,7 +191,7 @@ export const OnboardAccount: React.FC<OnboardAccountProps> = memo(() => {
       </>
     )
   ) : (
-    <ContentConnectYourWallet />
+    <ConnectPage />
   );
 });
 

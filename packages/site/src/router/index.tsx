@@ -1,21 +1,19 @@
-import { createBrowserRouter, Navigate, useNavigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { useAccount } from 'wagmi';
 
 import { SmartRouter } from './SmartRouter.js';
 import {
-  ContentConnectYourWallet,
+  ConnectPage,
   ContentManageAESKey,
   ContentSwitchNetwork,
 } from '../components';
 import { ContentInstallAESKeyManager } from '../components/ContentInstallAESKeyManager';
 import { PermissionGuard } from '../components/PermissionGuard';
-import { useMetaMask, useWrongChain } from '../hooks';
-import { useSnap } from '../hooks/SnapContext';
+import { useWrongChain } from '../hooks';
+import { useAesKey } from '../hooks/AesKeyContext';
 
 /**
- *
- * @param options0
- * @param options0.children
+ * Redirects to /connect if the user is not connected.
  */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isConnected } = useAccount();
@@ -28,9 +26,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 /**
- *
- * @param options0
- * @param options0.children
+ * Redirects to /network if the user is on the wrong chain.
  */
 function NetworkProtectedRoute({ children }: { children: React.ReactNode }) {
   const { wrongChain } = useWrongChain();
@@ -43,29 +39,13 @@ function NetworkProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 /**
- *
- * @param options0
- * @param options0.children
+ * Guards the /install route — only accessible when walletType is 'metamask-no-snap'.
+ * Redirects to /wallet otherwise.
  */
-function SnapProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { installedSnap } = useMetaMask();
+function InstallGuard({ children }: { children: React.ReactNode }) {
+  const { walletType } = useAesKey();
 
-  if (!installedSnap) {
-    return <Navigate to="/install" replace />;
-  }
-
-  return <>{children}</>;
-}
-
-/**
- *
- * @param options0
- * @param options0.children
- */
-function InstallProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { installedSnap } = useMetaMask();
-
-  if (installedSnap) {
+  if (walletType !== 'metamask-no-snap') {
     return <Navigate to="/wallet" replace />;
   }
 
@@ -73,43 +53,45 @@ function InstallProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 /**
- *
+ * Dashboard page — renders the AES key management UI.
  */
 function Dashboard() {
-  const { userHasAESKey, userAESKey } = useSnap();
+  const { aesKey } = useAesKey();
 
   return (
     <PermissionGuard>
       <ContentManageAESKey
-        userHasAESKey={userHasAESKey}
-        userAESKey={userAESKey}
+        userHasAESKey={aesKey !== null}
+        userAESKey={aesKey}
       />
     </PermissionGuard>
   );
 }
 
 /**
- *
+ * Token management page — renders the AES key management UI for tokens.
  */
 function TokenManagement() {
-  const { userHasAESKey, userAESKey } = useSnap();
+  const { aesKey } = useAesKey();
+
   return (
     <PermissionGuard>
       <ContentManageAESKey
-        userHasAESKey={userHasAESKey}
-        userAESKey={userAESKey}
+        userHasAESKey={aesKey !== null}
+        userAESKey={aesKey}
       />
     </PermissionGuard>
   );
 }
 
 /**
- *
+ * Root redirect — navigates to the appropriate route based on connection,
+ * network, and AES key state.
  */
 function RootRedirect() {
   const { isConnected } = useAccount();
   const { wrongChain } = useWrongChain();
-  const { installedSnap } = useMetaMask();
+  const { walletType } = useAesKey();
 
   if (!isConnected) {
     return <Navigate to="/connect" replace />;
@@ -119,7 +101,7 @@ function RootRedirect() {
     return <Navigate to="/network" replace />;
   }
 
-  if (!installedSnap) {
+  if (walletType === 'metamask-no-snap') {
     return <Navigate to="/install" replace />;
   }
 
@@ -137,7 +119,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'connect',
-        element: <ContentConnectYourWallet />,
+        element: <ConnectPage />,
       },
       {
         path: 'network',
@@ -152,9 +134,9 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <NetworkProtectedRoute>
-              <InstallProtectedRoute>
+              <InstallGuard>
                 <ContentInstallAESKeyManager />
-              </InstallProtectedRoute>
+              </InstallGuard>
             </NetworkProtectedRoute>
           </ProtectedRoute>
         ),
@@ -164,9 +146,7 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <NetworkProtectedRoute>
-              <SnapProtectedRoute>
-                <Dashboard />
-              </SnapProtectedRoute>
+              <Dashboard />
             </NetworkProtectedRoute>
           </ProtectedRoute>
         ),
@@ -176,9 +156,7 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <NetworkProtectedRoute>
-              <SnapProtectedRoute>
-                <TokenManagement />
-              </SnapProtectedRoute>
+              <TokenManagement />
             </NetworkProtectedRoute>
           </ProtectedRoute>
         ),
