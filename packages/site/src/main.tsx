@@ -4,7 +4,10 @@ import type { FunctionComponent, ReactNode } from 'react';
 import { StrictMode, createContext, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import styled, { ThemeProvider } from 'styled-components';
-import { configureCotiPlugin } from '@coti-io/coti-wallet-plugin';
+import {
+  configureCotiPlugin,
+  WagmiRainbowKitProvider,
+} from '@coti-io/coti-wallet-plugin';
 
 import './components/ContentManageToken/transitions.css';
 import App from './App.js';
@@ -12,7 +15,6 @@ import { GlobalBackground } from './components/GlobalBackground';
 import { dark, GlobalStyle, light } from './config/theme.js';
 import { AesKeyProvider } from './hooks/AesKeyContext';
 import { MetaMaskProvider } from './hooks/MetamaskContext';
-import { WalletProvider } from './providers/WalletProvider';
 import { getThemePreference } from './utils';
 
 // Resolve snap ID from environment (mirrors logic from config/snap.ts)
@@ -26,6 +28,31 @@ configureCotiPlugin({
   snapId,
   defaultNetworkId: 2632500, // COTI Mainnet
 });
+
+// Clear wagmi's persisted connection state so the app always starts
+// disconnected and shows the RainbowKit wallet picker first.
+// Without this, wagmi auto-reconnects to MetaMask on page load,
+// bypassing the wallet selection modal.
+try {
+  // wagmi stores recent connector in localStorage with key pattern 'wagmi.store'
+  const wagmiStoreKey = Object.keys(localStorage).find(
+    (k) => k === 'wagmi.store' || k.startsWith('wagmi'),
+  );
+  if (wagmiStoreKey) {
+    const stored = localStorage.getItem(wagmiStoreKey);
+    if (stored) {
+      // Parse and clear the "connections" and "current" state to force disconnect
+      const parsed = JSON.parse(stored);
+      if (parsed?.state) {
+        parsed.state.connections = { __type: 'Map', value: [] };
+        parsed.state.current = null;
+        localStorage.setItem(wagmiStoreKey, JSON.stringify(parsed));
+      }
+    }
+  }
+} catch {
+  // Non-critical — if it fails, wagmi may auto-reconnect but won't crash
+}
 
 const Wrapper = styled.div`
   display: flex;
@@ -52,7 +79,7 @@ export const Root: FunctionComponent<RootProps> = ({ children }) => {
 
   return (
     <ThemeProvider theme={darkTheme ? dark : light}>
-      <WalletProvider>
+      <WagmiRainbowKitProvider>
         <MetaMaskProvider>
           <AesKeyProvider>
             <GlobalBackground>
@@ -60,7 +87,7 @@ export const Root: FunctionComponent<RootProps> = ({ children }) => {
             </GlobalBackground>
           </AesKeyProvider>
         </MetaMaskProvider>
-      </WalletProvider>
+      </WagmiRainbowKitProvider>
     </ThemeProvider>
   );
 };
