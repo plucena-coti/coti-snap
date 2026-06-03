@@ -77,12 +77,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // The @bandprotocol/bandchain.js package in the workspace node_modules
-      // has a broken publishConfig.directory layout. Resolve from the plugin's
-      // own node_modules where it is properly installed.
+      // The @bandprotocol/bandchain.js package is not installed in the plugin's
+      // node_modules (it's an optional/unused transitive dep). Stub it with an
+      // empty module so Vite/esbuild don't crash during dep optimization.
       '@bandprotocol/bandchain.js': resolve(
         __dirname,
-        '../../node_modules/@coti-io/coti-wallet-plugin/node_modules/@bandprotocol/bandchain.js',
+        'src/stubs/bandchain-stub.js',
       ),
     },
     // Allow Vite to resolve packages from the plugin's node_modules
@@ -90,6 +90,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['@coti-io/coti-wallet-plugin', '@rainbow-me/rainbowkit'],
+    exclude: ['@bandprotocol/bandchain.js'],
   },
   define: {
     'process.env.VITE_GIT_COMMIT': JSON.stringify(getVersions().gitCommit),
