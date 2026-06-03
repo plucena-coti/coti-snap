@@ -191,12 +191,10 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
 
     try {
       const installed = await isCotiSnapInstalled();
-      console.log('[AesKeyContext] getAesKey: snap installed =', installed);
+      const cotiChainId = resolveCotiChainId();
+      console.log('[AesKeyContext] getAesKey: snap installed =', installed, '| cotiChainId =', cotiChainId);
 
       if (installed) {
-        const cotiChainId = resolveCotiChainId();
-        console.log('[AesKeyContext] getAesKey: using cotiChainId =', cotiChainId);
-
         // Snap is installed — check if it holds the key (silent), then retrieve
         const hasKey = await invokeSnap({
           method: 'has-aes-key',
@@ -219,17 +217,43 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
             return;
           }
         }
-        // Snap installed but has no key — fall through to onboard contract
-        // so the user can onboard and store a key.
+        // Snap installed but has no key — onboard via contract, then PERSIST
+        // the key to the snap so future loads retrieve it directly.
         console.log('[AesKeyContext] getAesKey: snap has no key, onboarding via contract');
       }
 
-      // Snap not installed (or has no key) — use the plugin's onboard path
-      console.log('[AesKeyContext] getAesKey: using pluginGetAesKey');
+      // Onboard via the plugin (contract flow) to obtain the key
+      console.log('[AesKeyContext] getAesKey: calling pluginGetAesKey...');
       const key = await pluginGetAesKey(address);
+      console.log(
+        '[AesKeyContext] getAesKey: pluginGetAesKey returned',
+        key ? `key(${key.length})` : 'null',
+      );
+
       if (key) {
         setAesKey(key);
         setShowOnboardModal(false);
+
+        // Persist the onboarded key into the snap so it is available next time.
+        if (installed) {
+          try {
+            console.log('[AesKeyContext] getAesKey: storing key in snap via set-aes-key...');
+            const stored = await invokeSnap({
+              method: 'set-aes-key',
+              params: { newUserAesKey: key, chainId: cotiChainId },
+            });
+            console.log('[AesKeyContext] getAesKey: set-aes-key result =', stored);
+
+            // Verify it was stored
+            const verifyHasKey = await invokeSnap({
+              method: 'has-aes-key',
+              params: { chainId: cotiChainId },
+            });
+            console.log('[AesKeyContext] getAesKey: verify has-aes-key after store =', verifyHasKey);
+          } catch (storeError) {
+            console.error('[AesKeyContext] getAesKey: failed to store key in snap:', storeError);
+          }
+        }
       }
     } catch (error: unknown) {
       const message =
