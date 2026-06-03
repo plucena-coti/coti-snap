@@ -84,7 +84,8 @@ export const useTokenList = (): PreloadedToken[] => {
     return () => {
       cancelled = true;
     };
-  }, [chainId, tokens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chainId]);
 
   return (chainId && tokens[chainId]) ? tokens[chainId] : [];
 };

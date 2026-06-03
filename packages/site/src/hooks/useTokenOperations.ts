@@ -785,13 +785,15 @@ export const useTokenOperations = (provider: BrowserProvider) => {
   const getTokenConfidentialStatus = useCallback(
     async (
       tokenAddress: string,
-    ): Promise<{ confidential: boolean; version?: 64 | 256 }> => {
+    ): Promise<{ confidential: boolean; version?: 64 | 256; noContract?: boolean }> => {
       try {
         const browserProvider = getBrowserProvider();
         const code = await browserProvider.getCode(tokenAddress);
 
         if (code === '0x') {
-          throw new Error('No contract deployed at this address');
+          // No contract at this address — return gracefully instead of throwing.
+          // The caller can check noContract to skip balance fetching.
+          return { confidential: false, noContract: true };
         }
 
         const erc165 = new ethers.Contract(
@@ -1057,8 +1059,14 @@ export const useTokenOperations = (provider: BrowserProvider) => {
     async (tokenAddress: string, aesKey?: string, decimals?: number) => {
       return withLoading(async () => {
         console.log(`[decryptERC20Balance] token=${tokenAddress}, hasAesKey=${!!aesKey}, decimals=${decimals}`);
-        const { confidential, version } =
+        const { confidential, version, noContract } =
           await getTokenConfidentialStatus(tokenAddress);
+
+        // Token has no deployed contract on this chain — return 0 gracefully
+        if (noContract) {
+          return 0n;
+        }
+
         console.log(`[decryptERC20Balance] token=${tokenAddress}, confidential=${confidential}, version=${version}`);
         const browserProvider = getBrowserProvider();
         const signer = await browserProvider.getSigner();

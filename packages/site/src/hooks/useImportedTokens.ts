@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 
 import { useInvokeSnap } from './useInvokeSnap';
@@ -32,11 +32,26 @@ export const useImportedTokens = (preloadedTokens?: PreloadedToken[]) => {
   const invokeSnap = useInvokeSnap();
   const hasSyncedRef = useRef(false);
 
+  // Stabilize preloadedTokens reference to prevent infinite re-render loop.
+  // useTokenList may return a new array reference on each render; we only
+  // update our stable ref when the content actually changes.
+  const preloadedTokensKey = useMemo(
+    () => (preloadedTokens ?? []).map((t) => t.address).join(','),
+    [preloadedTokens],
+  );
+  const stablePreloadedTokensRef = useRef(preloadedTokens ?? []);
+  if (
+    preloadedTokensKey !==
+    stablePreloadedTokensRef.current.map((t) => t.address).join(',')
+  ) {
+    stablePreloadedTokensRef.current = preloadedTokens ?? [];
+  }
+
   const loadTokens = useCallback(() => {
     try {
       if (address && chainId) {
         const userTokens = getImportedTokensByAccount(address, chainId);
-        const preloaded = preloadedTokens ?? [];
+        const preloaded = stablePreloadedTokensRef.current;
         // Merge: preloaded tokens first, then user-imported ones not already in preloaded list
         const preloadedAddresses = new Set(
           preloaded.map((t) => t.address.toLowerCase()),
@@ -54,7 +69,7 @@ export const useImportedTokens = (preloadedTokens?: PreloadedToken[]) => {
     } finally {
       setIsLoading(false);
     }
-  }, [address, chainId, preloadedTokens]);
+  }, [address, chainId, preloadedTokensKey]);
 
   const syncFromSnap = useCallback(async () => {
     if (!address || !chainId) {
@@ -66,7 +81,7 @@ export const useImportedTokens = (preloadedTokens?: PreloadedToken[]) => {
     hasSyncedRef.current = true;
 
     try {
-      const result = (await invokeSnap({ method: 'get-tokens' })) as {
+      const result = (await invokeSnap({ method: 'get-tokens', params: { chainId: chainId?.toString() } })) as {
         success: boolean;
         tokens: {
           address: string;
