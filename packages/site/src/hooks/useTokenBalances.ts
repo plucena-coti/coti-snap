@@ -1,5 +1,7 @@
 import type { BrowserProvider } from '@coti-io/coti-ethers';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useAccount } from 'wagmi';
+import { usePrivateTokenBalance } from '@coti-io/coti-wallet-plugin';
 
 import { useTokenOperations } from './useTokenOperations';
 import type { ImportedToken } from '../types/token';
@@ -20,6 +22,8 @@ export const useTokenBalances = ({
   const [balances, setBalances] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const { decryptERC20Balance } = useTokenOperations(provider);
+  const { fetchPrivateBalance } = usePrivateTokenBalance();
+  const { address } = useAccount();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const tokenAddresses = useMemo(
@@ -57,6 +61,20 @@ export const useTokenBalances = ({
         const batchPromises = batch.map(async (token) => {
           if (token.address && token.symbol !== 'COTI') {
             try {
+              // Private tokens: use the plugin's fetchPrivateBalance which
+              // correctly decrypts with the raw AES key via @coti-io/coti-sdk-typescript.
+              // Public tokens: use the site's decryptERC20Balance.
+              if (token.isPrivate && aesKey && address) {
+                const balance = await fetchPrivateBalance(
+                  address,
+                  aesKey,
+                  token.address,
+                  256, // All private tokens on COTI use 256-bit version
+                  token.decimals ?? 18,
+                );
+                return { address: token.address, balance };
+              }
+
               const balance = await decryptERC20Balance(
                 token.address,
                 aesKey || undefined,
