@@ -29,31 +29,6 @@ configureCotiPlugin({
   defaultNetworkId: 2632500, // COTI Mainnet
 });
 
-// Clear wagmi's persisted connection state so the app always starts
-// disconnected and shows the RainbowKit wallet picker first.
-// Without this, wagmi auto-reconnects to MetaMask on page load,
-// bypassing the wallet selection modal.
-try {
-  // wagmi stores recent connector in localStorage with key pattern 'wagmi.store'
-  const wagmiStoreKey = Object.keys(localStorage).find(
-    (k) => k === 'wagmi.store' || k.startsWith('wagmi'),
-  );
-  if (wagmiStoreKey) {
-    const stored = localStorage.getItem(wagmiStoreKey);
-    if (stored) {
-      // Parse and clear the "connections" and "current" state to force disconnect
-      const parsed = JSON.parse(stored);
-      if (parsed?.state) {
-        parsed.state.connections = { __type: 'Map', value: [] };
-        parsed.state.current = null;
-        localStorage.setItem(wagmiStoreKey, JSON.stringify(parsed));
-      }
-    }
-  }
-} catch {
-  // Non-critical — if it fails, wagmi may auto-reconnect but won't crash
-}
-
 const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
