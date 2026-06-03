@@ -26,7 +26,6 @@ const snapId = isSnapLocal
 // Configure the COTI plugin before React renders
 configureCotiPlugin({
   snapId,
-  defaultNetworkId: 2632500, // COTI Mainnet
 });
 
 const Wrapper = styled.div`
