@@ -11,9 +11,11 @@ import { useAccount } from 'wagmi';
 import {
   useWalletType,
   useAesKeyProvider,
-  useSnap,
 } from '@coti-io/coti-wallet-plugin';
 import type { WalletTypeInfo } from '@coti-io/coti-wallet-plugin';
+
+import { useInvokeSnap } from './useInvokeSnap';
+import { defaultSnapOrigin } from '../config';
 
 /**
  * Mapped wallet type exposed to the application.
@@ -90,11 +92,10 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     isOnboarding,
     onboardingError,
   } = useAesKeyProvider(walletTypeInfo);
-  // Plugin's own snap hooks — these are the proven, working snap RPC calls
-  // used internally by useAesKeyProvider. We use getAESKeyFromSnap directly
-  // so we never accidentally fall through to the onboard contract when the
-  // snap holds the key.
-  const { getAESKeyFromSnap, isSnapInstalled } = useSnap();
+  // Site's own snap invoker — correctly resolves the local snap id
+  // (local:http://localhost:8080) via resolveSnapId, unlike the plugin's
+  // useSnap which is locked to the npm id captured at module load.
+  const invokeSnap = useInvokeSnap();
 
   // AES key held in memory only — never persisted
   const [aesKey, setAesKey] = useState<string | null>(null);
@@ -122,13 +123,53 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   const combinedError = onboardingError ?? localError;
 
   /**
+   * Checks if the COTI snap is installed by reading wallet_getSnaps directly
+   * from window.ethereum (MetaMask). Matches the configured npm id, the local
+   * snap id, OR any local: snap (for local dev). This is needed because the
+   * plugin's own isSnapInstalled is locked to the npm id and misses the local
+   * snap in development.
+   */
+  const isCotiSnapInstalled = useCallback(async (): Promise<boolean> => {
+    try {
+      const ethereum = (window as any).ethereum;
+      if (!ethereum?.request) {
+        return false;
+      }
+      const snaps = (await ethereum.request({
+        method: 'wallet_getSnaps',
+      })) as Record<string, unknown>;
+
+      if (!snaps || typeof snaps !== 'object') {
+        return false;
+      }
+
+      const ids = Object.keys(snaps);
+      const found =
+        ids.includes(defaultSnapOrigin) ||
+        ids.some((id) => id.startsWith('local:') || id.includes('coti-snap'));
+
+      console.log(
+        '[AesKeyContext] isCotiSnapInstalled:',
+        found,
+        '| installed ids:',
+        ids,
+        '| looking for:',
+        defaultSnapOrigin,
+      );
+      return found;
+    } catch (error) {
+      console.warn('[AesKeyContext] isCotiSnapInstalled failed:', error);
+      return false;
+    }
+  }, []);
+
+  /**
    * Retrieves the AES key.
    *
-   * Mirrors examples/src/App.tsx: calls the plugin's getAESKeyFromSnap(address)
-   * which handles snap detection, connection, environment sync, and key
-   * retrieval (with caching). If the snap is installed and holds the key, the
-   * key is returned. Only when the snap is genuinely unavailable do we fall
-   * back to the plugin's onboard-contract path via pluginGetAesKey.
+   * If the COTI snap is installed, retrieves the key from it via the site's
+   * own invokeSnap (which resolves the correct local/npm snap id). Only when
+   * the snap is genuinely not installed do we fall back to the onboard
+   * contract via pluginGetAesKey.
    */
   const getAesKey = useCallback(async (): Promise<void> => {
     if (!address) {
@@ -138,30 +179,33 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     setLocalError(null);
 
     try {
-      // Check if the snap is installed (silent — wallet_getSnaps only)
-      const installed = await isSnapInstalled();
-      console.log('[AesKeyContext] getAesKey: isSnapInstalled =', installed);
+      const installed = await isCotiSnapInstalled();
+      console.log('[AesKeyContext] getAesKey: snap installed =', installed);
 
       if (installed) {
-        // Use the plugin's proven snap retrieval (handles connect + invoke)
-        const snapKey = await getAESKeyFromSnap(address);
-        console.log(
-          '[AesKeyContext] getAesKey: getAESKeyFromSnap =',
-          snapKey ? `key(${snapKey.length})` : 'null',
-        );
-        if (snapKey) {
-          setAesKey(snapKey);
-          setShowOnboardModal(false);
-          return;
+        // Snap is installed — check if it holds the key (silent), then retrieve
+        const hasKey = await invokeSnap({ method: 'has-aes-key', params: {} });
+        console.log('[AesKeyContext] getAesKey: has-aes-key =', hasKey);
+
+        if (hasKey) {
+          const snapKey = await invokeSnap({ method: 'get-aes-key', params: {} });
+          console.log(
+            '[AesKeyContext] getAesKey: get-aes-key =',
+            snapKey ? `key(${(snapKey as string).length})` : 'null',
+          );
+          if (snapKey && typeof snapKey === 'string') {
+            setAesKey(snapKey);
+            setShowOnboardModal(false);
+            return;
+          }
         }
-        // Snap installed but returned null (user cancelled) — stop here,
-        // do NOT fall through to the onboard contract.
-        return;
+        // Snap installed but has no key — fall through to onboard contract
+        // so the user can onboard and store a key.
+        console.log('[AesKeyContext] getAesKey: snap has no key, onboarding via contract');
       }
 
-      // Snap not installed — use the plugin's provider (non-MetaMask wallets
-      // route to the onboard contract here)
-      console.log('[AesKeyContext] getAesKey: snap not installed, using pluginGetAesKey');
+      // Snap not installed (or has no key) — use the plugin's onboard path
+      console.log('[AesKeyContext] getAesKey: using pluginGetAesKey');
       const key = await pluginGetAesKey(address);
       if (key) {
         setAesKey(key);
@@ -175,7 +219,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       console.error('[AesKeyContext] getAesKey error:', error);
       setLocalError(message);
     }
-  }, [address, isSnapInstalled, getAESKeyFromSnap, pluginGetAesKey]);
+  }, [address, isCotiSnapInstalled, invokeSnap, pluginGetAesKey]);
 
   /**
    * Clears the in-memory AES key and resets modal state and errors.
@@ -249,20 +293,25 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     const checkAndRetrieve = async () => {
       setIsCheckingSnap(true);
       try {
-        const installed = await isSnapInstalled();
-        console.log('[AesKeyContext] auto-check: isSnapInstalled =', installed);
+        const installed = await isCotiSnapInstalled();
+        console.log('[AesKeyContext] auto-check: snap installed =', installed);
 
         snapCheckDoneRef.current = address;
 
         if (installed) {
-          const key = await getAESKeyFromSnap(address);
-          console.log(
-            '[AesKeyContext] auto-check: getAESKeyFromSnap =',
-            key ? `key(${key.length})` : 'null',
-          );
-          if (key) {
-            setAesKey(key);
-            setShowOnboardModal(false);
+          const hasKey = await invokeSnap({ method: 'has-aes-key', params: {} });
+          console.log('[AesKeyContext] auto-check: has-aes-key =', hasKey);
+
+          if (hasKey) {
+            const key = await invokeSnap({ method: 'get-aes-key', params: {} });
+            console.log(
+              '[AesKeyContext] auto-check: get-aes-key =',
+              key ? `key(${(key as string).length})` : 'null',
+            );
+            if (key && typeof key === 'string') {
+              setAesKey(key);
+              setShowOnboardModal(false);
+            }
           }
         }
       } catch (error: unknown) {
@@ -274,7 +323,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     };
 
     void checkAndRetrieve();
-  }, [address, isConnected, aesKey, isOnboarding, isSnapInstalled, getAESKeyFromSnap]);
+  }, [address, isConnected, aesKey, isOnboarding, isCotiSnapInstalled, invokeSnap]);
 
   const contextValue = useMemo<AesKeyContextValue>(
     () => ({
