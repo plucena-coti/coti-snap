@@ -85,7 +85,7 @@ interface AesKeyProviderProps {
  * On disconnect, the key is cleared automatically.
  */
 export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain } = useAccount();
   const walletTypeInfo = useWalletType();
   const {
     getAesKey: pluginGetAesKey,
@@ -121,6 +121,17 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
    * direct getAesKey() call failures are surfaced to consumers.
    */
   const combinedError = onboardingError ?? localError;
+
+  /**
+   * Resolves the COTI chainId where the AES key is stored.
+   * The snap stores keys per COTI chainId. Non-COTI chains (e.g. Sepolia)
+   * default to COTI testnet, matching the plugin's getAESKeyFromSnap logic.
+   */
+  const resolveCotiChainId = useCallback((): number => {
+    const COTI_MAINNET_ID = 2632500;
+    const COTI_TESTNET_ID = 7082400;
+    return chain?.id === COTI_MAINNET_ID ? COTI_MAINNET_ID : COTI_TESTNET_ID;
+  }, [chain?.id]);
 
   /**
    * Checks if the COTI snap is installed by reading wallet_getSnaps directly
@@ -183,12 +194,21 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       console.log('[AesKeyContext] getAesKey: snap installed =', installed);
 
       if (installed) {
+        const cotiChainId = resolveCotiChainId();
+        console.log('[AesKeyContext] getAesKey: using cotiChainId =', cotiChainId);
+
         // Snap is installed — check if it holds the key (silent), then retrieve
-        const hasKey = await invokeSnap({ method: 'has-aes-key', params: {} });
+        const hasKey = await invokeSnap({
+          method: 'has-aes-key',
+          params: { chainId: cotiChainId },
+        });
         console.log('[AesKeyContext] getAesKey: has-aes-key =', hasKey);
 
         if (hasKey) {
-          const snapKey = await invokeSnap({ method: 'get-aes-key', params: {} });
+          const snapKey = await invokeSnap({
+            method: 'get-aes-key',
+            params: { chainId: cotiChainId },
+          });
           console.log(
             '[AesKeyContext] getAesKey: get-aes-key =',
             snapKey ? `key(${(snapKey as string).length})` : 'null',
@@ -219,7 +239,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       console.error('[AesKeyContext] getAesKey error:', error);
       setLocalError(message);
     }
-  }, [address, isCotiSnapInstalled, invokeSnap, pluginGetAesKey]);
+  }, [address, isCotiSnapInstalled, invokeSnap, pluginGetAesKey, resolveCotiChainId]);
 
   /**
    * Clears the in-memory AES key and resets modal state and errors.
@@ -299,11 +319,20 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         snapCheckDoneRef.current = address;
 
         if (installed) {
-          const hasKey = await invokeSnap({ method: 'has-aes-key', params: {} });
+          const cotiChainId = resolveCotiChainId();
+          console.log('[AesKeyContext] auto-check: using cotiChainId =', cotiChainId);
+
+          const hasKey = await invokeSnap({
+            method: 'has-aes-key',
+            params: { chainId: cotiChainId },
+          });
           console.log('[AesKeyContext] auto-check: has-aes-key =', hasKey);
 
           if (hasKey) {
-            const key = await invokeSnap({ method: 'get-aes-key', params: {} });
+            const key = await invokeSnap({
+              method: 'get-aes-key',
+              params: { chainId: cotiChainId },
+            });
             console.log(
               '[AesKeyContext] auto-check: get-aes-key =',
               key ? `key(${(key as string).length})` : 'null',
@@ -323,7 +352,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     };
 
     void checkAndRetrieve();
-  }, [address, isConnected, aesKey, isOnboarding, isCotiSnapInstalled, invokeSnap]);
+  }, [address, isConnected, aesKey, isOnboarding, isCotiSnapInstalled, invokeSnap, resolveCotiChainId]);
 
   const contextValue = useMemo<AesKeyContextValue>(
     () => ({
