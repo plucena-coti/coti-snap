@@ -1,8 +1,9 @@
 import { BrowserProvider } from '@coti-io/coti-ethers';
+import type { Eip1193Provider } from '@coti-io/coti-ethers';
 import { formatUnits } from 'ethers';
 import { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { useAccount, useBalance } from 'wagmi';
+import { useAccount, useBalance, useConnectorClient } from 'wagmi';
 
 import './transitions.css';
 import { BalanceDisplay } from './components/BalanceDisplay';
@@ -292,12 +293,28 @@ export const ContentManageToken: React.FC<ContentManageTokenProps> = memo(
       }
     }, [balance]);
 
+    const { data: connectorClient } = useConnectorClient();
+
+    // Create BrowserProvider from the wagmi connector's EIP-1193 provider.
+    // This ensures RPC calls go to the correct chain the user is connected to,
+    // unlike raw window.ethereum which may be hijacked by other extensions or
+    // pointing to a different chain.
     const browserProvider = useMemo(() => {
+      if (connectorClient?.transport) {
+        try {
+          return new BrowserProvider(
+            connectorClient.transport as unknown as Eip1193Provider,
+          );
+        } catch {
+          // Fallback if connector transport doesn't work
+        }
+      }
+      // Fallback to window.ethereum if connector not available
       if (typeof window !== 'undefined' && window.ethereum) {
-        return new BrowserProvider(window.ethereum);
+        return new BrowserProvider(window.ethereum as Eip1193Provider);
       }
       return null;
-    }, []);
+    }, [connectorClient]);
 
     const isWalletConnected = address && balance && provider;
     const shouldShowConnectWallet = !isWalletConnected;
