@@ -123,35 +123,44 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
 
   /**
    * Ensures the site has permission to invoke the snap.
-   * First checks wallet_getSnaps (always silent) to see if snap is already
-   * connected. Only calls wallet_requestSnaps if snap is not found.
+   * Checks wallet_getSnaps directly on window.ethereum (MetaMask's provider)
+   * to see if snap is already connected. Only calls wallet_requestSnaps
+   * if snap is not found.
    * Returns true if snap is available, false otherwise.
    */
   const ensureSnapConnection = useCallback(async (): Promise<boolean> => {
     try {
-      // Check if snap is already connected — wallet_getSnaps is always silent
-      const snaps = (await request({
-        method: 'wallet_getSnaps',
-      })) as Record<string, unknown> | null;
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
+        console.log('[AesKeyContext] no window.ethereum');
+        return false;
+      }
 
-      console.log('[AesKeyContext] wallet_getSnaps result:', snaps);
+      // Check if snap is already connected — wallet_getSnaps is always silent
+      const snaps = (await ethereum.request({
+        method: 'wallet_getSnaps',
+      })) as Record<string, unknown>;
+
+      console.log('[AesKeyContext] wallet_getSnaps result:', JSON.stringify(snaps));
       console.log('[AesKeyContext] looking for snapId:', defaultSnapOrigin);
 
-      if (snaps && Object.keys(snaps).length > 0) {
-        // Check if our snap is in the list
-        const hasSnap = defaultSnapOrigin in snaps ||
-          Object.keys(snaps).some((id) => id.startsWith('local:'));
+      if (snaps && typeof snaps === 'object') {
+        // Check if our snap ID is present
+        const hasExactSnap = defaultSnapOrigin in snaps;
+        // Also check for any local snap (for dev)
+        const hasLocalSnap = Object.keys(snaps).some((id) => id.startsWith('local:'));
 
-        console.log('[AesKeyContext] snap found in wallet_getSnaps:', hasSnap);
+        console.log('[AesKeyContext] hasExactSnap:', hasExactSnap, 'hasLocalSnap:', hasLocalSnap);
 
-        if (hasSnap) {
+        if (hasExactSnap || hasLocalSnap) {
+          // Snap is already installed and connected — no need for wallet_requestSnaps
           return true;
         }
       }
 
       // Snap not found — try requesting it (will prompt install/connect)
       console.log('[AesKeyContext] snap not found, calling wallet_requestSnaps');
-      await request({
+      await ethereum.request({
         method: 'wallet_requestSnaps',
         params: { [defaultSnapOrigin]: {} },
       });
@@ -160,7 +169,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       console.warn('[AesKeyContext] ensureSnapConnection failed:', error);
       return false;
     }
-  }, [request]);
+  }, []);
 
   /**
    * Retrieves the AES key. Always attempts the snap path first:
