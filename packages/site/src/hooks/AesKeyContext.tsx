@@ -119,9 +119,9 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   const combinedError = onboardingError ?? localError;
 
   /**
-   * Retrieves the AES key using the plugin's provider.
-   * The plugin routes to Snap or onboard contract based on wallet type.
-   * Captures and exposes any errors that occur during retrieval.
+   * Retrieves the AES key. For MetaMask wallets, first tries the snap directly
+   * (avoiding the plugin's fallback to onboard contract). Falls back to the
+   * plugin's provider for non-MetaMask wallets or if snap retrieval fails.
    */
   const getAesKey = useCallback(async (): Promise<void> => {
     if (!address) {
@@ -132,6 +132,34 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     setLocalError(null);
 
     try {
+      // For MetaMask wallets, try retrieving directly from the snap first.
+      // This avoids the plugin's fallback to the onboard contract when
+      // snap detection is unreliable (e.g., local dev).
+      if (walletType === 'metamask-snap' || walletType === 'metamask-no-snap') {
+        try {
+          const hasKey = await invokeSnap({
+            method: 'has-aes-key',
+            params: {},
+          });
+
+          if (hasKey) {
+            const snapKey = await invokeSnap({
+              method: 'get-aes-key',
+              params: {},
+            });
+            if (snapKey && typeof snapKey === 'string') {
+              setAesKey(snapKey);
+              setShowOnboardModal(false);
+              return;
+            }
+          }
+        } catch {
+          // Snap not available — fall through to plugin
+        }
+      }
+
+      // Fallback: use the plugin's provider (handles non-MetaMask wallets
+      // and the case where the snap genuinely has no key)
       const key = await pluginGetAesKey(address);
       if (key) {
         setAesKey(key);
@@ -144,7 +172,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
           : 'AES key retrieval failed. Please try again.';
       setLocalError(message);
     }
-  }, [address, pluginGetAesKey]);
+  }, [address, walletType, invokeSnap, pluginGetAesKey]);
 
   /**
    * Clears the in-memory AES key and resets modal state and errors.
