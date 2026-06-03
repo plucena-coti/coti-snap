@@ -4,10 +4,7 @@ import type { FunctionComponent, ReactNode } from 'react';
 import { StrictMode, createContext, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import styled, { ThemeProvider } from 'styled-components';
-import {
-  configureCotiPlugin,
-  WagmiRainbowKitProvider,
-} from '@coti-io/coti-wallet-plugin';
+import { configureCotiPlugin } from '@coti-io/coti-wallet-plugin';
 
 import './components/ContentManageToken/transitions.css';
 import App from './App.js';
@@ -15,6 +12,7 @@ import { GlobalBackground } from './components/GlobalBackground';
 import { dark, GlobalStyle, light } from './config/theme.js';
 import { AesKeyProvider } from './hooks/AesKeyContext';
 import { MetaMaskProvider } from './hooks/MetamaskContext';
+import { WalletProvider } from './providers/WalletProvider';
 import { getThemePreference } from './utils';
 
 // Resolve snap ID from environment (mirrors logic from config/snap.ts)
@@ -54,7 +52,7 @@ export const Root: FunctionComponent<RootProps> = ({ children }) => {
 
   return (
     <ThemeProvider theme={darkTheme ? dark : light}>
-      <WagmiRainbowKitProvider>
+      <WalletProvider>
         <MetaMaskProvider>
           <AesKeyProvider>
             <GlobalBackground>
@@ -62,7 +60,7 @@ export const Root: FunctionComponent<RootProps> = ({ children }) => {
             </GlobalBackground>
           </AesKeyProvider>
         </MetaMaskProvider>
-      </WagmiRainbowKitProvider>
+      </WalletProvider>
     </ThemeProvider>
   );
 };
