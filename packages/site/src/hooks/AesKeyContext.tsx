@@ -140,9 +140,10 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
    * The snap stores keys per COTI chainId. Non-COTI chains (e.g. Sepolia)
    * default to COTI testnet, matching the plugin's getAESKeyFromSnap logic.
    */
+  const COTI_MAINNET_ID = 2632500;
+  const COTI_TESTNET_ID = 7082400;
+
   const resolveCotiChainId = useCallback((): number => {
-    const COTI_MAINNET_ID = 2632500;
-    const COTI_TESTNET_ID = 7082400;
     return chain?.id === COTI_MAINNET_ID ? COTI_MAINNET_ID : COTI_TESTNET_ID;
   }, [chain?.id]);
 
@@ -220,27 +221,39 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       );
 
       if (installed) {
-        // Snap is installed — check if it holds the key (silent), then retrieve
-        const hasKey = await invokeSnap({
-          method: 'has-aes-key',
-          params: { chainId: cotiChainId },
-        });
-        console.log('[AesKeyContext] getAesKey: has-aes-key =', hasKey);
+        // Snap is installed — check if it holds the key (silent), then retrieve.
+        // Try both COTI chainIds because on page reload chain?.id may not be
+        // resolved yet, causing resolveCotiChainId to return the wrong one.
+        const cotiChainIds = [cotiChainId, cotiChainId === COTI_TESTNET_ID ? COTI_MAINNET_ID : COTI_TESTNET_ID];
+        let foundKey: string | null = null;
 
-        if (hasKey) {
-          const snapKey = await invokeSnap({
-            method: 'get-aes-key',
-            params: { chainId: cotiChainId },
+        for (const tryChainId of cotiChainIds) {
+          const hasKey = await invokeSnap({
+            method: 'has-aes-key',
+            params: { chainId: tryChainId },
           });
-          console.log(
-            '[AesKeyContext] getAesKey: get-aes-key =',
-            snapKey ? `key(${(snapKey as string).length})` : 'null',
-          );
-          if (snapKey && typeof snapKey === 'string') {
-            setAesKey(snapKey);
-            setShowOnboardModal(false);
-            return;
+          console.log(`[AesKeyContext] getAesKey: has-aes-key (chainId=${tryChainId}) =`, hasKey);
+
+          if (hasKey) {
+            const snapKey = await invokeSnap({
+              method: 'get-aes-key',
+              params: { chainId: tryChainId },
+            });
+            console.log(
+              '[AesKeyContext] getAesKey: get-aes-key =',
+              snapKey ? `key(${(snapKey as string).length})` : 'null',
+            );
+            if (snapKey && typeof snapKey === 'string') {
+              foundKey = snapKey;
+              break;
+            }
           }
+        }
+
+        if (foundKey) {
+          setAesKey(foundKey);
+          setShowOnboardModal(false);
+          return;
         }
         // Snap installed but has no key — onboard via contract, then PERSIST
         // the key to the snap so future loads retrieve it directly.
@@ -279,13 +292,17 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         if (installed) {
           try {
             console.log('[AesKeyContext] getAesKey: storing key in snap via set-aes-key...');
-            const stored = await invokeSnap({
-              method: 'set-aes-key',
-              params: { newUserAesKey: key, chainId: cotiChainId },
-            });
-            console.log('[AesKeyContext] getAesKey: set-aes-key result =', stored);
+            // Store under BOTH chainIds so the key is always findable
+            // regardless of which chain wagmi reports on reload.
+            for (const storeChainId of [COTI_TESTNET_ID, COTI_MAINNET_ID]) {
+              await invokeSnap({
+                method: 'set-aes-key',
+                params: { newUserAesKey: key, chainId: storeChainId },
+              });
+            }
+            console.log('[AesKeyContext] getAesKey: key stored under both chainIds');
 
-            // Verify it was stored
+            // Verify
             const verifyHasKey = await invokeSnap({
               method: 'has-aes-key',
               params: { chainId: cotiChainId },
@@ -384,27 +401,33 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         snapCheckDoneRef.current = address;
 
         if (installed) {
-          const cotiChainId = resolveCotiChainId();
-          console.log('[AesKeyContext] auto-check: using cotiChainId =', cotiChainId);
+          // Try both COTI chainIds — on page reload chain?.id may not be
+          // resolved yet, so we check both slots.
+          const primaryChainId = resolveCotiChainId();
+          const cotiChainIds = [primaryChainId, primaryChainId === COTI_TESTNET_ID ? COTI_MAINNET_ID : COTI_TESTNET_ID];
+          console.log('[AesKeyContext] auto-check: trying chainIds =', cotiChainIds);
 
-          const hasKey = await invokeSnap({
-            method: 'has-aes-key',
-            params: { chainId: cotiChainId },
-          });
-          console.log('[AesKeyContext] auto-check: has-aes-key =', hasKey);
-
-          if (hasKey) {
-            const key = await invokeSnap({
-              method: 'get-aes-key',
-              params: { chainId: cotiChainId },
+          for (const tryChainId of cotiChainIds) {
+            const hasKey = await invokeSnap({
+              method: 'has-aes-key',
+              params: { chainId: tryChainId },
             });
-            console.log(
-              '[AesKeyContext] auto-check: get-aes-key =',
-              key ? `key(${(key as string).length})` : 'null',
-            );
-            if (key && typeof key === 'string') {
-              setAesKey(key);
-              setShowOnboardModal(false);
+            console.log(`[AesKeyContext] auto-check: has-aes-key (chainId=${tryChainId}) =`, hasKey);
+
+            if (hasKey) {
+              const key = await invokeSnap({
+                method: 'get-aes-key',
+                params: { chainId: tryChainId },
+              });
+              console.log(
+                '[AesKeyContext] auto-check: get-aes-key =',
+                key ? `key(${(key as string).length})` : 'null',
+              );
+              if (key && typeof key === 'string') {
+                setAesKey(key);
+                setShowOnboardModal(false);
+                break;
+              }
             }
           }
         }
