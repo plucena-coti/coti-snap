@@ -157,13 +157,28 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
    */
   const isCotiSnapInstalled = useCallback(async (): Promise<boolean> => {
     try {
-      if (!metaMaskProvider?.request) {
-        console.log('[AesKeyContext] isCotiSnapInstalled: no MetaMask provider');
-        return false;
+      // Try the MetaMask EIP-6963 provider first, fall back to window.ethereum
+      let snaps: Record<string, unknown> | null = null;
+
+      if (metaMaskProvider?.request) {
+        try {
+          snaps = (await metaMaskProvider.request({
+            method: 'wallet_getSnaps',
+          })) as Record<string, unknown>;
+        } catch {
+          // Provider doesn't support wallet_getSnaps — try window.ethereum
+        }
       }
-      const snaps = (await metaMaskProvider.request({
-        method: 'wallet_getSnaps',
-      })) as Record<string, unknown>;
+
+      if (!snaps && typeof window !== 'undefined' && (window as any).ethereum?.request) {
+        try {
+          snaps = (await (window as any).ethereum.request({
+            method: 'wallet_getSnaps',
+          })) as Record<string, unknown>;
+        } catch {
+          // window.ethereum also doesn't support it — no MetaMask available
+        }
+      }
 
       if (!snaps || typeof snaps !== 'object') {
         return false;
@@ -258,21 +273,18 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         // Snap installed but has no key — onboard via contract, then PERSIST
         // the key to the snap so future loads retrieve it directly.
         console.log('[AesKeyContext] getAesKey: snap has no key, onboarding via contract');
-      } else if (metaMaskProvider) {
-        // Snap not installed but MetaMask is available — install the snap first.
-        // This triggers the MetaMask install dialog for the user.
+      } else if (metaMaskProvider || (typeof window !== 'undefined' && (window as any).ethereum)) {
+        // Snap not installed but a provider is available — install the snap.
         console.log('[AesKeyContext] getAesKey: installing snap...');
         try {
-          await metaMaskProvider.request({
+          const installProvider = metaMaskProvider || (window as any).ethereum;
+          await installProvider.request({
             method: 'wallet_requestSnaps',
             params: { [defaultSnapOrigin]: {} },
           });
           console.log('[AesKeyContext] getAesKey: snap installed successfully');
-          // After install, check if it already has a key (unlikely for fresh install)
-          // Continue to onboard contract below to get the key
         } catch (installError) {
           console.warn('[AesKeyContext] getAesKey: snap install failed:', installError);
-          // If user rejected install, still fall through to pluginGetAesKey
         }
       }
 
