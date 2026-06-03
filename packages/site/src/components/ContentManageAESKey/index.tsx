@@ -4,6 +4,7 @@ import { useAccount } from 'wagmi';
 import { DeleteAESKey } from './DeleteAESKey';
 import { OnboardAccount } from './OnboardAccount';
 import { useAesKey } from '../../hooks/AesKeyContext';
+import { Loading } from '../Loading';
 import { ContentManageToken } from '../ContentManageToken';
 import { DisplayAESKey } from '../ContentManageToken/DisplayAESKey';
 import { ContentBorderWrapper, ContentContainer } from '../styles';
@@ -22,7 +23,7 @@ export const ContentManageAESKey: React.FC<ContentManageAESKeyProps> = ({
   userAESKey,
 }) => {
   const { address } = useAccount();
-  const { isOnboarding } = useAesKey();
+  const { isOnboarding, isCheckingSnap } = useAesKey();
   const [aesKeyState, setAesKeyState] = useState<AESKeyState>({
     showManage: false,
   });
@@ -58,6 +59,11 @@ export const ContentManageAESKey: React.FC<ContentManageAESKeyProps> = ({
   };
 
   const renderContent = (): JSX.Element | null => {
+    // Show loading while checking if snap has a stored AES key
+    if (isCheckingSnap) {
+      return <Loading title="Checking account..." actionText="" />;
+    }
+
     if (shouldShowOnboarding) {
       return <OnboardAccount />;
     }
