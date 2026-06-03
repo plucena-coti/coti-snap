@@ -54,7 +54,7 @@ const Container = styled.div`
 export function SmartRouter() {
   const { isConnected } = useAccount();
   const { wrongChain } = useWrongChain();
-  const { aesKey, walletType, setShowOnboardModal } = useAesKey();
+  const { aesKey, walletType, setShowOnboardModal, isCheckingSnap } = useAesKey();
   const navigate = useNavigate();
   const [hasInitialized, setHasInitialized] = useState(false);
   const [, startTransition] = useTransition();
@@ -90,7 +90,8 @@ export function SmartRouter() {
       }
 
       // Connected, correct chain, MetaMask without Snap → /install
-      if (walletType === 'metamask-no-snap') {
+      // Skip redirect while checking if snap actually has a key (detection can be slow)
+      if (walletType === 'metamask-no-snap' && !isCheckingSnap) {
         navigate('/install', { replace: true });
         return;
       }
@@ -127,6 +128,7 @@ export function SmartRouter() {
     wrongChain,
     walletType,
     aesKey,
+    isCheckingSnap,
     navigate,
     setShowOnboardModal,
   ]);
