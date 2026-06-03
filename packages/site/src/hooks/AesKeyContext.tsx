@@ -99,9 +99,9 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   // Local error state to capture errors thrown by getAesKey calls
   const [localError, setLocalError] = useState<string | null>(null);
   // True while silently checking if the snap already has a stored AES key.
-  // Starts true when MetaMask is connected to prevent premature /install redirect.
+  // Starts true when connected to prevent premature /install redirect.
   const [isCheckingSnap, setIsCheckingSnap] = useState<boolean>(
-    walletTypeInfo.walletType === 'metamask',
+    isConnected && Boolean(address),
   );
   // Track which address we've already checked to avoid repeated checks
   const snapCheckDoneRef = useRef<string | null>(null);
@@ -119,9 +119,13 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   const combinedError = onboardingError ?? localError;
 
   /**
-   * Retrieves the AES key. For MetaMask wallets, first tries the snap directly
-   * (avoiding the plugin's fallback to onboard contract). Falls back to the
-   * plugin's provider for non-MetaMask wallets or if snap retrieval fails.
+   * Retrieves the AES key. Always attempts the snap path first (via invokeSnap)
+   * since the snap's 'has-aes-key' is a silent check. If the snap has the key,
+   * retrieves it directly. Falls back to the plugin's provider only when the
+   * snap is unavailable or has no key stored.
+   *
+   * This mirrors the examples/src/App.tsx pattern where getAesKey(address)
+   * handles routing transparently.
    */
   const getAesKey = useCallback(async (): Promise<void> => {
     if (!address) {
@@ -132,30 +136,28 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     setLocalError(null);
 
     try {
-      // For MetaMask wallets, try retrieving directly from the snap first.
-      // This avoids the plugin's fallback to the onboard contract when
-      // snap detection is unreliable (e.g., local dev).
-      if (walletType === 'metamask-snap' || walletType === 'metamask-no-snap') {
-        try {
-          const hasKey = await invokeSnap({
-            method: 'has-aes-key',
+      // Always try the snap first — invokeSnap will fail gracefully if
+      // the snap is not installed. This avoids depending on walletType
+      // detection which can be unreliable in local dev.
+      try {
+        const hasKey = await invokeSnap({
+          method: 'has-aes-key',
+          params: {},
+        });
+
+        if (hasKey) {
+          const snapKey = await invokeSnap({
+            method: 'get-aes-key',
             params: {},
           });
-
-          if (hasKey) {
-            const snapKey = await invokeSnap({
-              method: 'get-aes-key',
-              params: {},
-            });
-            if (snapKey && typeof snapKey === 'string') {
-              setAesKey(snapKey);
-              setShowOnboardModal(false);
-              return;
-            }
+          if (snapKey && typeof snapKey === 'string') {
+            setAesKey(snapKey);
+            setShowOnboardModal(false);
+            return;
           }
-        } catch {
-          // Snap not available — fall through to plugin
         }
+      } catch {
+        // Snap not available — fall through to plugin's onboard contract path
       }
 
       // Fallback: use the plugin's provider (handles non-MetaMask wallets
@@ -172,7 +174,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
           : 'AES key retrieval failed. Please try again.';
       setLocalError(message);
     }
-  }, [address, walletType, invokeSnap, pluginGetAesKey]);
+  }, [address, invokeSnap, pluginGetAesKey]);
 
   /**
    * Clears the in-memory AES key and resets modal state and errors.
@@ -197,19 +199,19 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   }, [isConnected]);
 
   /**
-   * When wallet type changes to MetaMask, set isCheckingSnap to true
-   * to prevent premature redirect to /install while we check the snap.
+   * When a new address connects and we haven't checked yet, set isCheckingSnap
+   * to prevent premature routing while the snap check runs.
    */
   useEffect(() => {
     if (
-      (walletType === 'metamask-snap' || walletType === 'metamask-no-snap') &&
-      aesKey === null &&
+      isConnected &&
       address &&
+      aesKey === null &&
       snapCheckDoneRef.current !== address
     ) {
       setIsCheckingSnap(true);
     }
-  }, [walletType, aesKey, address]);
+  }, [isConnected, aesKey, address]);
 
   /**
    * Automatically show the onboard modal when a non-MetaMask wallet
@@ -222,7 +224,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   }, [walletType, aesKey]);
 
   /**
-   * Auto-retrieve AES key from snap when MetaMask is connected.
+   * Auto-retrieve AES key from snap on wallet connect.
    *
    * Flow (mirrors examples/src/App.tsx pattern):
    * 1. Silently call 'has-aes-key' on the snap (no user prompt).
@@ -230,13 +232,11 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
    *    the snap's confirmation dialog, then navigate to key management page.
    * 3. If the snap has no key or isn't installed, do nothing — onboard page shows.
    *
-   * Triggers for both 'metamask-snap' and 'metamask-no-snap' because in local
-   * development the snap detection can be unreliable. The has-aes-key call
-   * will simply fail if the snap isn't actually installed.
+   * Always attempts the snap regardless of walletType since detection can be
+   * unreliable. The has-aes-key call will simply fail if snap isn't installed.
    */
   useEffect(() => {
     if (
-      (walletType !== 'metamask-snap' && walletType !== 'metamask-no-snap') ||
       !address ||
       !isConnected ||
       aesKey !== null ||
@@ -287,7 +287,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     };
 
     void checkAndRetrieve();
-  }, [walletType, address, isConnected, aesKey, isOnboarding, invokeSnap]);
+  }, [address, isConnected, aesKey, isOnboarding, invokeSnap]);
 
   const contextValue = useMemo<AesKeyContextValue>(
     () => ({
