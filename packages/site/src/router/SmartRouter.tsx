@@ -99,20 +99,12 @@ export function SmartRouter() {
       // Connected, correct chain, non-MetaMask, no AES key → show OnboardModal
       if (walletType === 'non-metamask' && aesKey === null) {
         setShowOnboardModal(true);
-        // Stay on current page; OnboardingWrapper will display the modal
-        if (
-          !isOnProtectedRoute &&
-          currentPath !== '/wallet' &&
-          currentPath !== '/connect'
-        ) {
-          navigate('/wallet', { replace: true });
-        }
-        return;
       }
 
-      // Connected, correct chain, has AES key → /wallet
+      // Connected, correct chain → navigate to /wallet if still on a
+      // connect/install/network page. The /wallet page handles all states
+      // (snap checking, onboarding, key management).
       if (
-        aesKey !== null &&
         !isOnProtectedRoute &&
         (currentPath === '/' ||
           currentPath === '/connect' ||
