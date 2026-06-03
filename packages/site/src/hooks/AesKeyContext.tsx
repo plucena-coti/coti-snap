@@ -245,6 +245,22 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         // Snap installed but has no key — onboard via contract, then PERSIST
         // the key to the snap so future loads retrieve it directly.
         console.log('[AesKeyContext] getAesKey: snap has no key, onboarding via contract');
+      } else if (metaMaskProvider) {
+        // Snap not installed but MetaMask is available — install the snap first.
+        // This triggers the MetaMask install dialog for the user.
+        console.log('[AesKeyContext] getAesKey: installing snap...');
+        try {
+          await metaMaskProvider.request({
+            method: 'wallet_requestSnaps',
+            params: { [defaultSnapOrigin]: {} },
+          });
+          console.log('[AesKeyContext] getAesKey: snap installed successfully');
+          // After install, check if it already has a key (unlikely for fresh install)
+          // Continue to onboard contract below to get the key
+        } catch (installError) {
+          console.warn('[AesKeyContext] getAesKey: snap install failed:', installError);
+          // If user rejected install, still fall through to pluginGetAesKey
+        }
       }
 
       // Onboard via the plugin (contract flow) to obtain the key
