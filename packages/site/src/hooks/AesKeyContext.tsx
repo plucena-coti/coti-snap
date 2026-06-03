@@ -14,8 +14,6 @@ import {
 } from '@coti-io/coti-wallet-plugin';
 import type { WalletTypeInfo } from '@coti-io/coti-wallet-plugin';
 
-import { useInvokeSnap } from './useInvokeSnap';
-import { useRequest } from './useRequest';
 import { defaultSnapOrigin } from '../config';
 
 /**
@@ -93,8 +91,6 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     isOnboarding,
     onboardingError,
   } = useAesKeyProvider(walletTypeInfo);
-  const invokeSnap = useInvokeSnap();
-  const request = useRequest();
 
   // AES key held in memory only — never persisted
   const [aesKey, setAesKey] = useState<string | null>(null);
@@ -122,60 +118,41 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   const combinedError = onboardingError ?? localError;
 
   /**
-   * Ensures the site has permission to invoke the snap.
-   * Checks wallet_getSnaps directly on window.ethereum (MetaMask's provider)
-   * to see if snap is already connected. Only calls wallet_requestSnaps
-   * if snap is not found.
-   * Returns true if snap is available, false otherwise.
+   * Calls a snap method directly on window.ethereum, bypassing wagmi's provider.
+   * This avoids the provider mismatch issue where wagmi's provider doesn't
+   * have snap invoke permissions.
    */
-  const ensureSnapConnection = useCallback(async (): Promise<boolean> => {
-    try {
+  const invokeSnapDirect = useCallback(
+    async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
       const ethereum = (window as any).ethereum;
       if (!ethereum) {
-        console.log('[AesKeyContext] no window.ethereum');
-        return false;
+        throw new Error('No window.ethereum');
       }
 
-      // Check if snap is already connected — wallet_getSnaps is always silent
-      const snaps = (await ethereum.request({
-        method: 'wallet_getSnaps',
-      })) as Record<string, unknown>;
-
-      console.log('[AesKeyContext] wallet_getSnaps result:', JSON.stringify(snaps));
-      console.log('[AesKeyContext] looking for snapId:', defaultSnapOrigin);
-
-      if (snaps && typeof snaps === 'object') {
-        // Check if our snap ID is present
-        const hasExactSnap = defaultSnapOrigin in snaps;
-        // Also check for any local snap (for dev)
-        const hasLocalSnap = Object.keys(snaps).some((id) => id.startsWith('local:'));
-
-        console.log('[AesKeyContext] hasExactSnap:', hasExactSnap, 'hasLocalSnap:', hasLocalSnap);
-
-        if (hasExactSnap || hasLocalSnap) {
-          // Snap is already installed and connected — no need for wallet_requestSnaps
-          return true;
-        }
-      }
-
-      // Snap not found — try requesting it (will prompt install/connect)
-      console.log('[AesKeyContext] snap not found, calling wallet_requestSnaps');
+      // First, ensure we have permission by calling wallet_requestSnaps.
+      // For already-installed snaps this should be instant with no dialog.
+      // We pass the version '*' to avoid MetaMask trying to "update" the snap.
       await ethereum.request({
         method: 'wallet_requestSnaps',
-        params: { [defaultSnapOrigin]: {} },
+        params: { [defaultSnapOrigin]: { version: '*' } },
       });
-      return true;
-    } catch (error) {
-      console.warn('[AesKeyContext] ensureSnapConnection failed:', error);
-      return false;
-    }
-  }, []);
+
+      // Now invoke the snap method
+      return ethereum.request({
+        method: 'wallet_invokeSnap',
+        params: {
+          snapId: defaultSnapOrigin,
+          request: params ? { method, params } : { method },
+        },
+      });
+    },
+    [],
+  );
 
   /**
    * Retrieves the AES key. Always attempts the snap path first:
-   * 1. Ensures snap permission via wallet_requestSnaps
-   * 2. Calls has-aes-key (silent, no dialog)
-   * 3. If key exists, retrieves via get-aes-key
+   * 1. Calls has-aes-key directly on window.ethereum (silent, no dialog)
+   * 2. If key exists, retrieves via get-aes-key
    *
    * Falls back to the plugin's onboard contract path only when the snap
    * is genuinely unavailable or has no key stored.
@@ -192,27 +169,15 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     setLocalError(null);
 
     try {
-      // Step 1: Ensure we have permission to talk to the snap.
-      console.log('[AesKeyContext] getAesKey called for address:', address);
-      const snapAvailable = await ensureSnapConnection();
-      console.log('[AesKeyContext] snapAvailable:', snapAvailable);
-
-      if (snapAvailable) {
-        // Step 2: Silent check — has-aes-key does NOT show a dialog
-        console.log('[AesKeyContext] calling has-aes-key...');
-        const hasKey = await invokeSnap({
-          method: 'has-aes-key',
-          params: {},
-        });
+      // Try the snap path directly via window.ethereum
+      try {
+        console.log('[AesKeyContext] getAesKey: trying snap path directly...');
+        const hasKey = await invokeSnapDirect('has-aes-key');
         console.log('[AesKeyContext] has-aes-key result:', hasKey);
 
         if (hasKey) {
-          // Step 3: Snap has the key — retrieve it (shows snap confirmation)
           console.log('[AesKeyContext] calling get-aes-key...');
-          const snapKey = await invokeSnap({
-            method: 'get-aes-key',
-            params: {},
-          });
+          const snapKey = await invokeSnapDirect('get-aes-key');
           console.log('[AesKeyContext] get-aes-key result:', snapKey ? `key(${(snapKey as string).length} chars)` : 'null');
           if (snapKey && typeof snapKey === 'string') {
             setAesKey(snapKey);
@@ -221,8 +186,10 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
             return;
           }
         }
-        // Snap has no key — fall through to onboard contract
         console.log('[AesKeyContext] snap has no key, falling through to plugin');
+      } catch (snapError) {
+        console.warn('[AesKeyContext] snap path failed:', snapError);
+        // Snap not available — fall through to plugin's onboard contract path
       }
 
       // Fallback: use the plugin's provider (handles non-MetaMask wallets
@@ -241,7 +208,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       console.error('[AesKeyContext] getAesKey error:', error);
       setLocalError(message);
     }
-  }, [address, ensureSnapConnection, invokeSnap, pluginGetAesKey]);
+  }, [address, invokeSnapDirect, pluginGetAesKey]);
 
   /**
    * Clears the in-memory AES key and resets modal state and errors.
@@ -320,41 +287,22 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     const checkAndRetrieve = async () => {
       setIsCheckingSnap(true);
       try {
-        // Ensure we have permission to talk to the snap first
-        console.log('[AesKeyContext] auto-check: ensuring snap connection...');
-        const snapAvailable = await ensureSnapConnection();
-        console.log('[AesKeyContext] auto-check: snapAvailable:', snapAvailable);
-        if (!snapAvailable) {
-          snapCheckDoneRef.current = address;
-          return;
-        }
-
-        // Silent check — 'has-aes-key' does NOT show a dialog.
-        console.log('[AesKeyContext] auto-check: calling has-aes-key...');
-        const hasKey = await invokeSnap({
-          method: 'has-aes-key',
-          params: {},
-        });
+        console.log('[AesKeyContext] auto-check: trying has-aes-key...');
+        const hasKey = await invokeSnapDirect('has-aes-key');
         console.log('[AesKeyContext] auto-check: has-aes-key result:', hasKey);
 
         snapCheckDoneRef.current = address;
 
         if (hasKey) {
-          // Snap has the key — retrieve it directly via 'get-aes-key'.
           console.log('[AesKeyContext] auto-check: calling get-aes-key...');
-          const key = await invokeSnap({
-            method: 'get-aes-key',
-            params: {},
-          });
+          const key = await invokeSnapDirect('get-aes-key');
           console.log('[AesKeyContext] auto-check: get-aes-key result:', key ? 'got key' : 'null');
           if (key && typeof key === 'string') {
             setAesKey(key);
             setShowOnboardModal(false);
           }
         }
-        // If snap doesn't have the key, do nothing — onboard page will show
       } catch (error: unknown) {
-        // Snap not installed or communication failed — user will see onboard page
         snapCheckDoneRef.current = address;
         console.warn('[AesKeyContext] auto-check failed:', error);
       } finally {
@@ -363,7 +311,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     };
 
     void checkAndRetrieve();
-  }, [address, isConnected, aesKey, isOnboarding, invokeSnap, ensureSnapConnection]);
+  }, [address, isConnected, aesKey, isOnboarding, invokeSnapDirect]);
 
   const contextValue = useMemo<AesKeyContextValue>(
     () => ({
