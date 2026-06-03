@@ -29,7 +29,7 @@ export const SUPPORTED_CHAIN_IDS = [
   COTI_MAINNET_CHAIN_ID,
   COTI_TESTNET_CHAIN_ID,
 ] as const;
-export const DEFAULT_CHAIN_ID = COTI_MAINNET_CHAIN_ID;
+export const DEFAULT_CHAIN_ID = COTI_TESTNET_CHAIN_ID;
 
 const COTI_TESTNET = defineChain({
   id: COTI_TESTNET_CHAIN_ID,
@@ -75,7 +75,7 @@ const COTI_MAINNET = defineChain({
   contracts: {},
 });
 
-export const COTI_CHAINS = [COTI_MAINNET, COTI_TESTNET] as const;
+export const COTI_CHAINS = [COTI_TESTNET, COTI_MAINNET] as const;
 
 export const config = createConfig({
   chains: COTI_CHAINS,

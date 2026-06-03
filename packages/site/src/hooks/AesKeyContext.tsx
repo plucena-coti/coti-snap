@@ -4,7 +4,6 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useAccount } from 'wagmi';
@@ -85,6 +84,15 @@ interface AesKeyProviderProps {
  * The AES key is held in React state only (never persisted).
  * On disconnect, the key is cleared automatically.
  */
+
+// Module-level state that survives React StrictMode double-mount.
+// StrictMode unmounts/remounts components, resetting useRef values.
+// These module-level vars prevent duplicate snap checks that overwhelm MetaMask.
+// We store on window to also survive Vite HMR which resets module-level vars.
+const WIN = typeof window !== 'undefined' ? (window as any) : ({} as any);
+if (!WIN.__aesKeyCtx) WIN.__aesKeyCtx = { done: null, installed: false, key: null, inProgress: false, inProgressSince: 0, chainId: null, keys: {} };
+const _ctx = WIN.__aesKeyCtx as { done: string | null; installed: boolean; key: string | null; inProgress: boolean; inProgressSince: number; chainId: number | null; keys: Record<number, string> };
+
 export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   const { address, isConnected, chain } = useAccount();
   const walletTypeInfo = useWalletType();
@@ -99,18 +107,22 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   const invokeSnap = useInvokeSnap();
   // The detected MetaMask EIP-6963 provider (not raw window.ethereum, which
   // can be hijacked by other wallet extensions).
-  const { provider: metaMaskProvider } = useMetaMaskContext();
+  const { provider: metaMaskProvider, hasCheckedForProvider } = useMetaMaskContext();
 
   // AES key held in memory only — never persisted
-  const [aesKey, setAesKey] = useState<string | null>(null);
+  const [aesKey, setAesKeyState] = useState<string | null>(_ctx.key);
+
+  // Wrapper that keeps module-level cache in sync with React state
+  const setAesKey = useCallback((key: string | null) => {
+    _ctx.key = key;
+    setAesKeyState(key);
+  }, []);
   const [showOnboardModal, setShowOnboardModal] = useState<boolean>(false);
   // Local error state to capture errors thrown by getAesKey calls
   const [localError, setLocalError] = useState<string | null>(null);
   // True while silently checking if the snap already has a stored AES key.
   // Only meaningful for MetaMask; set by the snap-check effect below.
   const [isCheckingSnap, setIsCheckingSnap] = useState<boolean>(false);
-  // Track which address we've already checked to avoid repeated checks
-  const snapCheckDoneRef = useRef<string | null>(null);
 
   const walletType = useMemo(
     () => mapWalletType(walletTypeInfo),
@@ -155,54 +167,36 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
    * the plugin's own isSnapInstalled is locked to the npm id and misses the
    * local snap in development.
    */
+  /**
+   * Checks if the COTI snap is installed. Uses a cached result to avoid
+   * repeated RPC calls that can fail due to MetaMask rate-limiting.
+   * The actual check is done by attempting to invoke the snap directly —
+   * if it works, the snap is installed.
+   */
   const isCotiSnapInstalled = useCallback(async (): Promise<boolean> => {
+    // Once confirmed installed, never re-check during this session
+    if (_ctx.installed === true) {
+      console.log('[AesKeyContext] isCotiSnapInstalled: true (cached)');
+      return true;
+    }
+
     try {
-      // Try the MetaMask EIP-6963 provider first, fall back to window.ethereum
-      let snaps: Record<string, unknown> | null = null;
-
-      if (metaMaskProvider?.request) {
-        try {
-          snaps = (await metaMaskProvider.request({
-            method: 'wallet_getSnaps',
-          })) as Record<string, unknown>;
-        } catch {
-          // Provider doesn't support wallet_getSnaps — try window.ethereum
-        }
-      }
-
-      if (!snaps && typeof window !== 'undefined' && (window as any).ethereum?.request) {
-        try {
-          snaps = (await (window as any).ethereum.request({
-            method: 'wallet_getSnaps',
-          })) as Record<string, unknown>;
-        } catch {
-          // window.ethereum also doesn't support it — no MetaMask available
-        }
-      }
-
-      if (!snaps || typeof snaps !== 'object') {
-        return false;
-      }
-
-      const ids = Object.keys(snaps);
-      const found =
-        ids.includes(defaultSnapOrigin) ||
-        ids.some((id) => id.startsWith('local:') || id.includes('coti-snap'));
-
+      const result = await invokeSnap({ method: 'check-account-permissions' });
+      const installed = result !== null;
       console.log(
         '[AesKeyContext] isCotiSnapInstalled:',
-        found,
-        '| installed ids:',
-        ids,
-        '| looking for:',
-        defaultSnapOrigin,
+        installed,
+        '(via invokeSnap check-account-permissions)',
       );
-      return found;
+      if (installed) {
+        _ctx.installed = true;
+      }
+      return installed;
     } catch (error) {
       console.warn('[AesKeyContext] isCotiSnapInstalled failed:', error);
       return false;
     }
-  }, [metaMaskProvider]);
+  }, [invokeSnap]);
 
   /**
    * Retrieves the AES key.
@@ -236,49 +230,38 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       );
 
       if (installed) {
-        // Snap is installed — check if it holds the key (silent), then retrieve.
-        // Try both COTI chainIds because on page reload chain?.id may not be
-        // resolved yet, causing resolveCotiChainId to return the wrong one.
-        const cotiChainIds = [cotiChainId, cotiChainId === COTI_TESTNET_ID ? COTI_MAINNET_ID : COTI_TESTNET_ID];
-        let foundKey: string | null = null;
+        // Snap is installed — check if it holds the key for the current chain.
+        // Different chains have different AES keys — only retrieve for current chain.
+        const hasKey = await invokeSnap({
+          method: 'has-aes-key',
+          params: { chainId: cotiChainId },
+        });
+        console.log(`[AesKeyContext] getAesKey: has-aes-key (chainId=${cotiChainId}) =`, hasKey);
 
-        for (const tryChainId of cotiChainIds) {
-          const hasKey = await invokeSnap({
-            method: 'has-aes-key',
-            params: { chainId: tryChainId },
+        if (hasKey) {
+          const snapKey = await invokeSnap({
+            method: 'get-aes-key',
+            params: { chainId: cotiChainId },
           });
-          console.log(`[AesKeyContext] getAesKey: has-aes-key (chainId=${tryChainId}) =`, hasKey);
-
-          if (hasKey) {
-            const snapKey = await invokeSnap({
-              method: 'get-aes-key',
-              params: { chainId: tryChainId },
-            });
-            console.log(
-              '[AesKeyContext] getAesKey: get-aes-key =',
-              snapKey ? `key(${(snapKey as string).length})` : 'null',
-            );
-            if (snapKey && typeof snapKey === 'string') {
-              foundKey = snapKey;
-              break;
-            }
+          console.log(
+            '[AesKeyContext] getAesKey: get-aes-key =',
+            snapKey ? `key(${(snapKey as string).length})` : 'null',
+          );
+          if (snapKey && typeof snapKey === 'string') {
+            setAesKey(snapKey);
+            setShowOnboardModal(false);
+            return;
           }
         }
 
-        if (foundKey) {
-          setAesKey(foundKey);
-          setShowOnboardModal(false);
-          return;
-        }
-        // Snap installed but has no key — onboard via contract, then PERSIST
+        // Snap installed but has no key for this chain — onboard via contract, then PERSIST
         // the key to the snap so future loads retrieve it directly.
         console.log('[AesKeyContext] getAesKey: snap has no key, onboarding via contract');
-      } else if (metaMaskProvider || (typeof window !== 'undefined' && (window as any).ethereum)) {
-        // Snap not installed but a provider is available — install the snap.
+      } else if (metaMaskProvider) {
+        // Snap not installed but MetaMask EIP-6963 provider is available — install the snap.
         console.log('[AesKeyContext] getAesKey: installing snap...');
         try {
-          const installProvider = metaMaskProvider || (window as any).ethereum;
-          await installProvider.request({
+          await metaMaskProvider.request({
             method: 'wallet_requestSnaps',
             params: { [defaultSnapOrigin]: {} },
           });
@@ -303,16 +286,13 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         // Persist the onboarded key into the snap so it is available next time.
         if (installed) {
           try {
-            console.log('[AesKeyContext] getAesKey: storing key in snap via set-aes-key...');
-            // Store under BOTH chainIds so the key is always findable
-            // regardless of which chain wagmi reports on reload.
-            for (const storeChainId of [COTI_TESTNET_ID, COTI_MAINNET_ID]) {
-              await invokeSnap({
-                method: 'set-aes-key',
-                params: { newUserAesKey: key, chainId: storeChainId },
-              });
-            }
-            console.log('[AesKeyContext] getAesKey: key stored under both chainIds');
+            console.log('[AesKeyContext] getAesKey: storing key in snap via set-aes-key for chainId =', cotiChainId);
+            // Store ONLY under the current chain — different chains have different keys
+            await invokeSnap({
+              method: 'set-aes-key',
+              params: { newUserAesKey: key, chainId: cotiChainId },
+            });
+            console.log('[AesKeyContext] getAesKey: key stored for chainId =', cotiChainId);
 
             // Verify
             const verifyHasKey = await invokeSnap({
@@ -353,7 +333,12 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       setLocalError(null);
       setShowOnboardModal(false);
       setIsCheckingSnap(false);
-      snapCheckDoneRef.current = null;
+      _ctx.done = null;
+      _ctx.installed = false;
+      _ctx.key = null;
+      _ctx.inProgress = false;
+      _ctx.chainId = null;
+      _ctx.keys = {};
     }
   }, [isConnected]);
 
@@ -366,7 +351,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       isConnected &&
       address &&
       aesKey === null &&
-      snapCheckDoneRef.current !== address
+      _ctx.done !== address
     ) {
       setIsCheckingSnap(true);
     }
@@ -385,74 +370,146 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   /**
    * Auto-retrieve AES key from snap on wallet connect.
    *
-   * Mirrors examples/src/App.tsx: if the snap is installed, retrieve the key
-   * via the plugin's getAESKeyFromSnap. If the snap isn't installed, do
-   * nothing — the onboard page will show.
+   * Instead of first checking "is snap installed" (which is fragile due to
+   * MetaMask rate-limiting and StrictMode double-mount), we directly try to
+   * get the key via invokeSnap. If it succeeds → key set, done.
+   * If it returns null → snap not installed or no key stored → show onboard.
    */
   useEffect(() => {
     if (
       !address ||
       !isConnected ||
-      aesKey !== null ||
       isOnboarding
     ) {
       return;
     }
 
-    // Only check once per address to avoid repeated prompts
-    if (snapCheckDoneRef.current === address) {
+    const currentChainId = resolveCotiChainId();
+
+    // If chain changed, check if we have a cached key for the new chain
+    if (_ctx.chainId !== null && _ctx.chainId !== currentChainId) {
+      _ctx.done = null;
+      _ctx.inProgress = false;
+      const cachedKey = _ctx.keys[currentChainId];
+      if (cachedKey) {
+        // We already have a key for this chain from a previous fetch
+        _ctx.key = cachedKey;
+        _ctx.chainId = currentChainId;
+        if (aesKey !== cachedKey) {
+          setAesKey(cachedKey);
+        }
+        return;
+      }
+      // No cached key for new chain — need to fetch
+      _ctx.key = null;
+      setAesKey(null);
+    }
+    _ctx.chainId = currentChainId;
+
+    // If we already have a key for this chain, skip
+    if (_ctx.key) {
       return;
     }
 
-    const checkAndRetrieve = async () => {
+    // If already checked this address on this chain, skip
+    if (aesKey !== null) {
+      return;
+    }
+
+    // If a check is already in progress, skip (with timeout safety)
+    if (_ctx.inProgress) {
+      // Safety: if stuck for >10s, reset (e.g. from previous HMR/crash)
+      if (!_ctx.inProgressSince || Date.now() - _ctx.inProgressSince > 10000) {
+        _ctx.inProgress = false;
+      } else {
+        return;
+      }
+    }
+
+    // Only check once per address+chain combo
+    const doneKey = `${address}:${currentChainId}`;
+    if (_ctx.done === doneKey) {
+      return;
+    }
+
+    // Mark immediately to prevent concurrent fires
+    _ctx.done = doneKey;
+    _ctx.inProgress = true;
+    _ctx.inProgressSince = Date.now();
+
+    const checkAndRetrieve = async (retryCount = 0) => {
+      // If key was already found (by another concurrent call), stop
+      if (_ctx.key) {
+        _ctx.inProgress = false;
+        setIsCheckingSnap(false);
+        return;
+      }
       setIsCheckingSnap(true);
       try {
-        const installed = await isCotiSnapInstalled();
-        console.log('[AesKeyContext] auto-check: snap installed =', installed);
+        // Get key for the current chain only — different chains have different keys.
+        const cotiChainId = resolveCotiChainId();
+        console.log('[AesKeyContext] auto-check: looking for key on chainId =', cotiChainId, retryCount > 0 ? `(retry ${retryCount})` : '');
 
-        snapCheckDoneRef.current = address;
+        try {
+          const hasKey = await invokeSnap({
+            method: 'has-aes-key',
+            params: { chainId: cotiChainId },
+          });
+          console.log(`[AesKeyContext] auto-check: has-aes-key (chainId=${cotiChainId}) =`, hasKey);
 
-        if (installed) {
-          // Try both COTI chainIds — on page reload chain?.id may not be
-          // resolved yet, so we check both slots.
-          const primaryChainId = resolveCotiChainId();
-          const cotiChainIds = [primaryChainId, primaryChainId === COTI_TESTNET_ID ? COTI_MAINNET_ID : COTI_TESTNET_ID];
-          console.log('[AesKeyContext] auto-check: trying chainIds =', cotiChainIds);
+          // null means RPC failed (provider not ready / rate-limited)
+          // Retry up to 3 times with increasing delay
+          if (hasKey === null && retryCount < 3) {
+            console.log('[AesKeyContext] auto-check: provider not ready, retrying in', (retryCount + 1) * 1500, 'ms');
+            _ctx.done = null;
+            setTimeout(() => {
+              checkAndRetrieve(retryCount + 1);
+            }, (retryCount + 1) * 1500);
+            return;
+          }
 
-          for (const tryChainId of cotiChainIds) {
-            const hasKey = await invokeSnap({
-              method: 'has-aes-key',
-              params: { chainId: tryChainId },
+          if (hasKey) {
+            const key = await invokeSnap({
+              method: 'get-aes-key',
+              params: { chainId: cotiChainId },
             });
-            console.log(`[AesKeyContext] auto-check: has-aes-key (chainId=${tryChainId}) =`, hasKey);
-
-            if (hasKey) {
-              const key = await invokeSnap({
-                method: 'get-aes-key',
-                params: { chainId: tryChainId },
-              });
-              console.log(
-                '[AesKeyContext] auto-check: get-aes-key =',
-                key ? `key(${(key as string).length})` : 'null',
-              );
-              if (key && typeof key === 'string') {
-                setAesKey(key);
-                setShowOnboardModal(false);
-                break;
-              }
+            console.log(
+              '[AesKeyContext] auto-check: get-aes-key =',
+              key ? `key(${(key as string).length})` : 'null',
+            );
+            if (key && typeof key === 'string') {
+              _ctx.installed = true;
+              _ctx.key = key;
+              _ctx.keys[cotiChainId] = key; // Cache per chain
+              setAesKey(key);
+              setShowOnboardModal(false);
+              return; // Done — key found
             }
           }
+        } catch {
+          // invokeSnap threw — provider issue, retry if possible
+          if (retryCount < 3) {
+            _ctx.done = null;
+            setTimeout(() => {
+              checkAndRetrieve(retryCount + 1);
+            }, (retryCount + 1) * 1500);
+            return;
+          }
         }
+
+        // Definitive: snap responded with false — no key for this chain
+        console.log('[AesKeyContext] auto-check: no key found for chainId =', cotiChainId);
       } catch (error: unknown) {
-        snapCheckDoneRef.current = address;
         console.warn('[AesKeyContext] auto-check failed:', error);
+        _ctx.done = null;
       } finally {
+        _ctx.inProgress = false;
         setIsCheckingSnap(false);
       }
     };
 
     void checkAndRetrieve();
-  }, [address, isConnected, aesKey, isOnboarding, isCotiSnapInstalled, invokeSnap, resolveCotiChainId]);
+  }, [address, isConnected, aesKey, isOnboarding, invokeSnap, resolveCotiChainId]);
 
   const contextValue = useMemo<AesKeyContextValue>(
     () => ({
