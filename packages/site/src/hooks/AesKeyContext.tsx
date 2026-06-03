@@ -204,10 +204,11 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     setLocalError(null);
 
     try {
-      // Only talk to the snap when the connected wallet is MetaMask.
-      // For other wallets, go straight to the plugin's onboard path which
-      // uses the wagmi connector's provider (NOT window.ethereum).
-      const installed = isMetaMask ? await isCotiSnapInstalled() : false;
+      // Try to detect and use the snap. isCotiSnapInstalled uses the MetaMask
+      // EIP-6963 provider directly — it doesn't depend on walletType which
+      // can be unreliable (e.g. reports 'non-metamask' even for MetaMask
+      // when there are window.ethereum conflicts).
+      const installed = await isCotiSnapInstalled();
       const cotiChainId = resolveCotiChainId();
       console.log(
         '[AesKeyContext] getAesKey: walletType =',
@@ -287,7 +288,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       console.error('[AesKeyContext] getAesKey error:', error);
       setLocalError(message);
     }
-  }, [address, isMetaMask, walletType, isCotiSnapInstalled, invokeSnap, pluginGetAesKey, resolveCotiChainId]);
+  }, [address, isCotiSnapInstalled, invokeSnap, pluginGetAesKey, resolveCotiChainId]);
 
   /**
    * Clears the in-memory AES key and resets modal state and errors.
@@ -312,13 +313,11 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   }, [isConnected]);
 
   /**
-   * When a MetaMask wallet connects and we haven't checked yet, set
-   * isCheckingSnap to prevent premature routing while the snap check runs.
-   * Non-MetaMask wallets never trigger snap checks.
+   * When a wallet connects and we haven't checked yet, set isCheckingSnap
+   * to prevent premature routing while the snap check runs.
    */
   useEffect(() => {
     if (
-      isMetaMask &&
       isConnected &&
       address &&
       aesKey === null &&
@@ -326,7 +325,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     ) {
       setIsCheckingSnap(true);
     }
-  }, [isMetaMask, isConnected, aesKey, address]);
+  }, [isConnected, aesKey, address]);
 
   /**
    * Automatically show the onboard modal when a non-MetaMask wallet
@@ -347,7 +346,6 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
    */
   useEffect(() => {
     if (
-      !isMetaMask ||
       !address ||
       !isConnected ||
       aesKey !== null ||
@@ -403,7 +401,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     };
 
     void checkAndRetrieve();
-  }, [isMetaMask, address, isConnected, aesKey, isOnboarding, isCotiSnapInstalled, invokeSnap, resolveCotiChainId]);
+  }, [address, isConnected, aesKey, isOnboarding, isCotiSnapInstalled, invokeSnap, resolveCotiChainId]);
 
   const contextValue = useMemo<AesKeyContextValue>(
     () => ({
