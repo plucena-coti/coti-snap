@@ -193,7 +193,7 @@ export const ContentManageToken: React.FC<ContentManageTokenProps> = memo(
     const { address, chain } = useAccount();
     const { data: balance, isLoading: isBalanceLoading, refetch: refetchBalance } = useBalance({ address });
     const { provider } = useMetaMaskContext();
-    const { getAesKey: getAESKey, aesKey: userAESKey } = useAesKey();
+    const { getAesKey: getAESKey, aesKey: userAESKey, walletType } = useAesKey();
     const userHasAESKey = userAESKey !== null;
     const { copied, copyToClipboard } = useCopyToClipboard();
 
@@ -421,7 +421,7 @@ export const ContentManageToken: React.FC<ContentManageTokenProps> = memo(
       );
     }
 
-    if (!currentAESKey && userHasAESKey && !showAESKeyDisplay && !aesKey) {
+    if (!currentAESKey && userHasAESKey && !showAESKeyDisplay && !aesKey && (walletType === 'metamask-snap' || walletType === 'metamask-no-snap')) {
       return (
         <MainStack>
           <RequestAESKey

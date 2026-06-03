@@ -52,12 +52,18 @@ const Container = styled.div`
  * - Connected, correct chain, has AES key → /wallet
  */
 export function SmartRouter() {
-  const { isConnected } = useAccount();
+  const { isConnected, connector } = useAccount();
   const { wrongChain } = useWrongChain();
   const { aesKey, walletType, setShowOnboardModal, isCheckingSnap } = useAesKey();
   const navigate = useNavigate();
   const [hasInitialized, setHasInitialized] = useState(false);
   const [, startTransition] = useTransition();
+
+  // Determine if user connected with MetaMask based on wagmi connector
+  const isMetaMaskConnector = (() => {
+    const id = connector?.id?.toLowerCase() ?? '';
+    return id.includes('metamask') || id.includes('io.metamask');
+  })();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -91,13 +97,13 @@ export function SmartRouter() {
 
       // Connected, correct chain, MetaMask without Snap → /install
       // Skip redirect while checking if snap actually has a key (detection can be slow)
-      if (walletType === 'metamask-no-snap' && !isCheckingSnap) {
+      if (isMetaMaskConnector && walletType === 'metamask-no-snap' && !isCheckingSnap) {
         navigate('/install', { replace: true });
         return;
       }
 
       // Connected, correct chain, non-MetaMask, no AES key → show OnboardModal
-      if (walletType === 'non-metamask' && aesKey === null) {
+      if (!isMetaMaskConnector && aesKey === null) {
         setShowOnboardModal(true);
       }
 
@@ -121,12 +127,14 @@ export function SmartRouter() {
     walletType,
     aesKey,
     isCheckingSnap,
+    isMetaMaskConnector,
     navigate,
     setShowOnboardModal,
   ]);
 
-  // Show loading while wallet type is being determined
-  if (walletType === null && isConnected) {
+  // Show loading only briefly while connector info is being determined
+  // But don't block forever — after wagmi mounts, connector should resolve quickly
+  if (!connector && isConnected && !hasInitialized) {
     return (
       <Container>
         <Header />
