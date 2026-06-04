@@ -19,7 +19,8 @@ import type { ImportedToken } from '../types/token';
  * ciphertext format. All other private tokens use 256-bit.
  */
 const PCOTI_ADDRESSES = new Set([
-  '0x6ce8907414986e73de9e7d28d62ea2080f8e88e1', // testnet
+  '0x6ce8907414986e73de9e7d28d62ea2080f8e88e1', // testnet p.COTI
+  '0xd2f2692b83c3ecdf2eaa0f7c2632bbd46ae1cc91', // mainnet p.COTI
 ]);
 
 /** Nested 4-part ciphertext ABI (PoD pTokens) */
