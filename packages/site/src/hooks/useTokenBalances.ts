@@ -174,16 +174,18 @@ export const useTokenBalances = ({
   const { data: connectorClient } = useConnectorClient();
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Get the raw EIP-1193 provider for private balance calls.
-  // For MetaMask, window.ethereum works (same as the plugin's examples).
+  // Get the raw EIP-1193 provider from wagmi connector for private balance calls.
   // We MUST use vanilla ethers BrowserProvider (not @coti-io/coti-ethers) to avoid
   // the custom signer's auto-decryption interfering with manual decryption.
   const rawEip1193Provider = useMemo((): Eip1193Provider | null => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      return window.ethereum as unknown as Eip1193Provider;
-    }
     if (connectorClient?.transport) {
       return connectorClient.transport as unknown as Eip1193Provider;
+    }
+    // Fallback: extract the underlying EIP-1193 provider from the @coti-io/coti-ethers
+    // BrowserProvider that was passed to us. The _getConnection() internal might not
+    // be accessible, so just use window.ethereum as last resort.
+    if (typeof window !== 'undefined' && window.ethereum) {
+      return window.ethereum as unknown as Eip1193Provider;
     }
     return null;
   }, [connectorClient]);
