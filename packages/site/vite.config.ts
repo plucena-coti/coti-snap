@@ -84,6 +84,13 @@ export default defineConfig({
         __dirname,
         'src/stubs/bandchain-stub.js',
       ),
+      // RainbowKit 2.2.11 imports { porto } from "wagmi/connectors" but
+      // wagmi 2.16.5 doesn't export it. Alias to a wrapper that re-exports
+      // everything plus a stub porto function.
+      'wagmi/connectors': resolve(
+        __dirname,
+        'src/stubs/wagmi-connectors-wrapper.js',
+      ),
     },
     // Allow Vite to resolve packages from the plugin's node_modules
     preserveSymlinks: true,
