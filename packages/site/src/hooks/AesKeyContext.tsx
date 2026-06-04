@@ -495,7 +495,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         }
 
         if (hasKey) {
-          const key = await invokeSnap({
+          let key = await invokeSnap({
             method: 'get-aes-key',
             params: { chainId: cotiChainId },
           });
@@ -503,6 +503,15 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
             '[AesKeyContext] auto-check: get-aes-key =',
             key ? `key(${(key as string).length})` : 'null',
           );
+          // If get-aes-key returned null (dialog conflict), wait and retry once
+          if (!key) {
+            await new Promise(r => setTimeout(r, 2000));
+            key = await invokeSnap({
+              method: 'get-aes-key',
+              params: { chainId: cotiChainId },
+            });
+            console.log('[AesKeyContext] auto-check: get-aes-key retry =', key ? `key(${(key as string).length})` : 'null');
+          }
           if (key && typeof key === 'string') {
             _ctx.installed = true;
             _ctx.key = key;
