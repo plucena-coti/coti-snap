@@ -18,6 +18,7 @@ import {
 import { useMetaMask } from '../hooks';
 import { useAesKey } from '../hooks/AesKeyContext';
 import { useInvokeSnap } from '../hooks/useInvokeSnap';
+import { isMobile } from '../utils/isMobile';
 
 type PermissionCheckResult = {
   hasPermission: boolean;
@@ -48,6 +49,17 @@ const isPermissionDenied = (
 };
 
 export const PermissionGuard: React.FC<PermissionGuardProps> = ({
+  children,
+}) => {
+  // On mobile, snaps are not used — skip all permission checks
+  if (isMobile) {
+    return <>{children}</>;
+  }
+
+  return <PermissionGuardInner>{children}</PermissionGuardInner>;
+};
+
+const PermissionGuardInner: React.FC<PermissionGuardProps> = ({
   children,
 }) => {
   const { onboardingError: settingAESKeyError } = useAesKey();
@@ -164,3 +176,4 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
 };
 
 PermissionGuard.displayName = 'PermissionGuard';
+PermissionGuardInner.displayName = 'PermissionGuardInner';

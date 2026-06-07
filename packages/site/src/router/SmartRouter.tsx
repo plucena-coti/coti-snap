@@ -12,6 +12,7 @@ import {
 } from '../components/styles';
 import { useWrongChain } from '../hooks';
 import { useAesKey } from '../hooks/AesKeyContext';
+import { isMobile } from '../utils/isMobile';
 
 const Container = styled.div`
   display: flex;
@@ -95,15 +96,19 @@ export function SmartRouter() {
         return;
       }
 
-      // Connected, correct chain, MetaMask without Snap → /install
+      // Connected, correct chain, MetaMask without Snap → /install (desktop only)
+      // On mobile, snaps are not supported — skip install and go to contract onboarding.
       // Skip redirect while checking if snap actually has a key (detection can be slow)
       if (isMetaMaskConnector && walletType === 'metamask-no-snap' && !isCheckingSnap) {
-        navigate('/install', { replace: true });
-        return;
+        if (!isMobile) {
+          navigate('/install', { replace: true });
+          return;
+        }
+        // Mobile: fall through to /wallet where contract onboarding will handle it
       }
 
-      // Connected, correct chain, non-MetaMask, no AES key → show OnboardModal
-      if (!isMetaMaskConnector && aesKey === null) {
+      // Connected, correct chain, non-MetaMask (or mobile MetaMask), no AES key → show OnboardModal
+      if ((!isMetaMaskConnector || isMobile) && aesKey === null) {
         setShowOnboardModal(true);
       }
 

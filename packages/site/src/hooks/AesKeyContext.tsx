@@ -13,6 +13,8 @@ import {
 } from '@coti-io/coti-wallet-plugin';
 import type { WalletTypeInfo } from '@coti-io/coti-wallet-plugin';
 
+import { isMobile } from '../utils/isMobile';
+
 import { useInvokeSnap } from './useInvokeSnap';
 import { useMetaMaskContext } from './MetamaskContext';
 import { defaultSnapOrigin } from '../config';
@@ -234,8 +236,9 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         cotiChainId,
       );
 
-      // Only try snap for MetaMask connections
-      if (isMetaMask) {
+      // Only try snap for MetaMask connections on desktop.
+      // On mobile, snaps are not supported — skip directly to contract onboarding.
+      if (isMetaMask && !isMobile) {
         const installed = await isCotiSnapInstalled();
 
         if (installed) {
@@ -283,8 +286,8 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
         setAesKey(key);
         setShowOnboardModal(false);
 
-        // Persist the onboarded key into the snap (MetaMask only)
-        if (isMetaMask) {
+        // Persist the onboarded key into the snap (MetaMask desktop only)
+        if (isMetaMask && !isMobile) {
           try {
             console.log('[AesKeyContext] getAesKey: storing key in snap via set-aes-key for chainId =', cotiChainId);
             await invokeSnap({
@@ -356,10 +359,15 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   /**
    * When a MetaMask wallet connects and we haven't checked yet, set isCheckingSnap
    * to prevent premature routing while the snap check runs.
-   * Non-MetaMask wallets skip this entirely.
+   * Non-MetaMask wallets and mobile devices skip this entirely.
    */
   useEffect(() => {
     if (!isConnected || !address || !connector) return;
+    // On mobile, snaps are not supported — never enter snap-checking state
+    if (isMobile) {
+      setIsCheckingSnap(false);
+      return;
+    }
     const connectorId = connector.id?.toLowerCase() ?? '';
     const isMetaMask = connectorId.includes('metamask') || connectorId.includes('io.metamask');
     if (isMetaMask && aesKey === null && !_ctx.key) {
@@ -372,6 +380,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
   /**
    * Automatically show the onboard modal when a non-MetaMask wallet
    * is connected and no AES key has been retrieved yet.
+   * On mobile, also show for MetaMask since snaps are not supported.
    */
   useEffect(() => {
     if (!isConnected || !connector || aesKey !== null) {
@@ -379,7 +388,7 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
     }
     const connectorId = connector.id?.toLowerCase() ?? '';
     const isMetaMaskConnector = connectorId.includes('metamask') || connectorId.includes('io.metamask');
-    if (!isMetaMaskConnector) {
+    if (!isMetaMaskConnector || isMobile) {
       setShowOnboardModal(true);
     }
   }, [isConnected, connector, aesKey]);
@@ -402,10 +411,11 @@ export const AesKeyProvider: React.FC<AesKeyProviderProps> = ({ children }) => {
       return;
     }
 
-    // Only run snap auto-check if the user connected with MetaMask.
+    // Only run snap auto-check if the user connected with MetaMask on desktop.
+    // On mobile, snaps are not supported — skip entirely.
     const connectorId = connector?.id?.toLowerCase() ?? '';
     const isMetaMaskConnector = connectorId.includes('metamask') || connectorId.includes('io.metamask');
-    if (!isMetaMaskConnector) {
+    if (!isMetaMaskConnector || isMobile) {
       return;
     }
 

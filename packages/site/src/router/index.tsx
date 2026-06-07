@@ -11,6 +11,7 @@ import { ContentInstallAESKeyManager } from '../components/ContentInstallAESKeyM
 import { PermissionGuard } from '../components/PermissionGuard';
 import { useWrongChain } from '../hooks';
 import { useAesKey } from '../hooks/AesKeyContext';
+import { isMobile } from '../utils/isMobile';
 
 /**
  * Redirects to /connect if the user is not connected.
@@ -39,11 +40,17 @@ function NetworkProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Guards the /install route — only accessible when walletType is 'metamask-no-snap'.
+ * Guards the /install route — only accessible on desktop when walletType is 'metamask-no-snap'.
+ * On mobile, snaps are not supported so redirect to /wallet for contract onboarding.
  * Redirects to /wallet otherwise.
  */
 function InstallGuard({ children }: { children: React.ReactNode }) {
   const { walletType } = useAesKey();
+
+  // Mobile devices can't install snaps — redirect to contract onboarding
+  if (isMobile) {
+    return <Navigate to="/wallet" replace />;
+  }
 
   if (walletType !== 'metamask-no-snap') {
     return <Navigate to="/wallet" replace />;
@@ -101,7 +108,8 @@ function RootRedirect() {
     return <Navigate to="/network" replace />;
   }
 
-  if (walletType === 'metamask-no-snap') {
+  // On mobile, skip snap install — go directly to wallet for contract onboarding
+  if (!isMobile && walletType === 'metamask-no-snap') {
     return <Navigate to="/install" replace />;
   }
 
